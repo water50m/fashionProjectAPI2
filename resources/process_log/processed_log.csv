@@ -1,0 +1,1 @@
+detect_id,process_id,filename,datetime,person_detection_result_path,clothing_detection_result_path,save_result_name,process_type736de679-5146-4982-8210-b18490f22d9e,382f2bc9-6470-4ca1-b9b5-0696e200f712,testvideo.mp4,2025-09-05 09:20:52,../resources/result_prediction/people_detection/,../resources/result_prediction/clothing_detection/,detect,detect-scan
