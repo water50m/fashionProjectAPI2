@@ -2,7 +2,7 @@
 from pathlib import Path
 import json
 
-CONFIG_PATH = Path("../resources/config.json")
+CONFIG_PATH = Path("resources/config.json")
 _config = None
 
 def load_config() -> dict[str,str]:

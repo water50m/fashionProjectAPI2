@@ -25,7 +25,7 @@ filter = CSVSearchService()
 data_manage = DataManager()
 config = get_config()
 CLASS_NAMES_B = ['short sleeve top', 'long sleeve top', 'short sleeve outwear', 'long sleeve outwear', 'vest', 'sling', 'shorts', 'trousers', 'skirt', 'short sleeve dress', 'long sleeve dress', 'vest dress', 'sling dress']
-CONFIG_PATH = '../resources/config.json'
+CONFIG_PATH = 'resources/config.json'
 AI_MODEL_PATH = 'E:\\ALL_CODE\\python\\fashionV1\\fastapi-project\\model\\fashion13cls.pt'
 VIDEO_PATH = 'E:\\ALL_CODE\\nextjs\\fashion_project_1\\public\\videos'
 
@@ -112,8 +112,7 @@ def clean_data(detections):
     return best_per_class
 
 def find_clothing(data):
-    print("data is : ")
-    print(data)
+
     try:
         gruop_data = pd.DataFrame(data).groupby('track_id')
         body_T_class = [0, 1, 2, 3, 4, 5]
@@ -154,7 +153,14 @@ def find_clothing(data):
                                 y_clothing = row['y_clothing']+row['h_clothing']
                                 w_clothing = row['w_clothing']
                                 h_clothing = 2* row['h_clothing']
-                        new_data = {**row.to_dict(), 'timestamp': timeframe, 'class': top1, 'class_name': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), 'x_clothing': x_clothing, 'y_clothing': y_clothing, 'w_clothing': w_clothing, 'h_clothing': h_clothing}
+                        new_data = {**row.to_dict(), 
+                                    'timestamp': timeframe, 
+                                    'class': top1, 
+                                    'class_name': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), 
+                                    'x_clothing': x_clothing, 
+                                    'y_clothing': y_clothing, 
+                                    'w_clothing': w_clothing, 
+                                    'h_clothing': h_clothing}
                         new_rows.append(new_data)
                 new_df = pd.DataFrame(new_rows)
                 return_data = pd.concat([df, new_df, return_data], ignore_index=True)
@@ -171,8 +177,21 @@ def find_clothing(data):
                     frame_group = objs.groupby('timestamp')
                     for timeframe, frames in frame_group:
                         row = frames.iloc[0]
-                        new_data1 = {'timestamp': {**row.to_dict()}, 'class': timeframe, 'class_name': top1, 'h_clothing': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), **row['h_clothing'] + 2}
-                        new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': top2, 'y_clothing': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2), 'h_clothing': row['y_clothing'], 'h_clothing': row['h_clothing'] - 2}, **row}
+                        new_data1 = {
+                                        **row.to_dict(),
+                                        'timestamp':timeframe , 
+                                        'class': top1, 
+                                        'class_name':  CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), 
+                                        'h_clothing': row['h_clothing'] / 2,
+                                    }
+                        new_data2 = {
+                                        **row.to_dict(),
+                                        'timestamp': timeframe,
+                                        'class': top2,
+                                        'class_name': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2),
+                                        'y_clothing': int(row['y_clothing']) - int(row['h_clothing']) /2,
+                                        'h_clothing': int(row['h_clothing']) /2
+                                    }                       
                         new_rows.append(new_data1)
                         new_rows.append(new_data2)
                 new_df = pd.DataFrame(new_rows)
@@ -189,8 +208,22 @@ def find_clothing(data):
                     frame_group = objs.groupby('timestamp')
                     for timeframe, frames in frame_group:
                         row = frames.iloc[0]
-                        new_data1 = {'timestamp': {**row.to_dict()}, 'class': timeframe, 'class_name': top2, 'h_clothing': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2), **row['h_clothing'] + 2}
-                        new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': top1, 'y_clothing': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), 'h_clothing': row['y_clothing'], 'h_clothing': row['h_clothing'] - 2}, **row}
+                        new_data1 = {
+                                        **row.to_dict(),
+                                        'timestamp': timeframe,
+                                        'class': top2,
+                                        'class_name': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2),
+                                        'h_clothing': int(row['h_clothing']) /2
+                                    }
+
+                        new_data2 = {
+                                        **row.to_dict(),
+                                        'timestamp': timeframe,
+                                        'class': top1,
+                                        'class_name': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1),
+                                        'y_clothing': int(row['y_clothing']) - int(row['h_clothing']) / 2,
+                                        'h_clothing': int(row['h_clothing']) / 2
+                                    }
                         new_rows.append(new_data1)
                         new_rows.append(new_data2)
                 new_df = pd.DataFrame(new_rows)
@@ -212,8 +245,22 @@ def find_clothing(data):
                     frame_group = objs.groupby('timestamp')
                     for timeframe, frames in frame_group:
                         row = frames.iloc[0]
-                        new_data1 = {**row.to_dict(), 'timestamp': timeframe, 'class': class_id_top, 'class_name': CLASS_NAMES_B[class_id_top] if class_id_top < len(CLASS_NAMES_B) else str(class_id_top), 'y_clothing': row['y_clothing'] + row['h_clothing'] + []}
-                        new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': class_id_dress, 'y_clothing': CLASS_NAMES_B[class_id_dress] if class_id_dress < len(CLASS_NAMES_B) else str(class_id_dress), 'h_clothing': row['y_clothing'] + row['h_clothing'] + 2 / row['h_clothing']}}
+                        new_data1 = {
+                            **row.to_dict(),
+                            'timestamp': timeframe,
+                            'class': class_id_top,
+                            'class_name': CLASS_NAMES_B[class_id_top] if class_id_top < len(CLASS_NAMES_B) else str(class_id_top),
+                            'y_clothing': int(row['y_clothing']) - int(row['h_clothing'])  # ✅ รวม y + h
+                        }
+
+                        new_data2 = {
+                            **row.to_dict(),
+                            'timestamp': timeframe,
+                            'class': class_id_dress,
+                            'class_name': CLASS_NAMES_B[class_id_dress] if class_id_dress < len(CLASS_NAMES_B) else str(class_id_dress),
+                            'y_clothing': int(row['y_clothing']) - int(row['h_clothing']),
+                            'h_clothing': int(row['h_clothing']) * 2  # ✅ ขยายกรอบขึ้น 2
+                        }
                         new_rows.append(new_data1)
                         new_rows.append(new_data2)
                 new_df = pd.DataFrame(new_rows)
@@ -311,10 +358,7 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
         filename = os.path.basename(video_path)
         while cap.isOpened():
             success, frame = cap.read()
-            print(success)
             if not success:
-                print()
-                print('not found video')
                 break
             else:  # inserted
                 
@@ -364,8 +408,7 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
 
                             yield {'frame': frame_index, 'progress': round(frame_index + cap.get(cv2.CAP_PROP_FRAME_COUNT) + 100, 2)}
                 frame_index = frame_index + 1
-        print("result prediction : ")
-        print(result_detection_clothing)
+
         detection_clothing_tuned = find_clothing(result_detection_clothing).to_dict(orient='records')
         cap.release()
         data_manage.update_result_to_json(result_people_detection_csv, people_detections)
