@@ -1,8 +1,8 @@
 {
     "CONFIG_FILE_PATH": "resources\\config.json",
     "RESULTS_PREDICT_DIR": "resources\\result_prediction\\",
-    "JSON_RESULT_PREDICT_CLOTHING": "../resources\\result_prediction\\clothing_detection\\results_clothing_detection_20250907_1.json",
-    "JSON_RESULT_PREDICT_PERSON": "../resources\\result_prediction\\people_detection\\results_people_detection_20250907_1.json",
+    "JSON_RESULT_PREDICT_CLOTHING": "resources\\result_prediction\\clothing_detection\\results_20250910_20250910_3.json",
+    "JSON_RESULT_PREDICT_PERSON": "resources\\result_prediction\\people_detection\\results_20250910_20250910_3.json",
     "RESULT_PREDICT_DIR": "resources\\result_prediction\\",
     "CUSTOM_RESULT_PREDICT_DIR": "resources\\result_prediction_custom\\",
     "VIDEO_PATH": "resources\\videos\\",

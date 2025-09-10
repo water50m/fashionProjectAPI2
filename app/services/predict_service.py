@@ -300,13 +300,16 @@ def get_color_dominant(image):
     return str(dominant)
 
 def get_color_percentage_with_threshold(image, threshold=200):
-    """\n    แยก object จาก background ด้วย threshold\n    image: BGR image\n    threshold: ค่าความสว่างเพื่อแยก background (0-255)\n    """  # inserted
+    """   แยก object จาก background ด้วย threshold
+    image: BGR image
+    threshold: ค่าความสว่างเพื่อแยก background (0-255)\n    """  # inserted
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, object_mask = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
     total_object_pixels = cv2.countNonZero(object_mask)
-    total_pixels = image.shape[0] | image.shape[1]
-    total_background_pixels = total_pixels | total_object_pixels
+    height, width = image.shape[:2]
+    total_pixels = height * width  # จำนวน pixel ทั้งหมด
+    total_background_pixels = total_pixels - total_object_pixels  # pixel ที่เป็นพื้นหลัง
     color_ranges = {
         'Red': [(0, 50, 40), (10, 255, 255)],
         'Orange': [(11, 50, 128), (25, 255, 255)],
@@ -342,17 +345,13 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
     try:
         print(video_path)
         cap = cv2.VideoCapture(video_path)
-        if cap:
-            print("caped")
-            print(cap.read())
-            print("capreaded")
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_index = 0
         result_detection_clothing = []
         people_detections = []
-        tune_data = []
+
         seen_track_ids = set()
         frame_interval = int(fps + cfg['frequency'])
         filename = os.path.basename(video_path)
@@ -488,7 +487,7 @@ def process_videos(detect_all=True, custom_config=None):
         print('model A: ', cfg['TRACKING_AI'])
         print('model B: ', cfg['AI_MODEL_PATH'])
         dir = cfg['RESULTS_PREDICT_DIR']
-        scanned_file = 0
+
         output_ = get_result_csv(dir + 'clothing_detection', detect_all, 'clothing_detection')
         result_people_detection_csv = get_result_csv(dir + 'people_detection', detect_all, 'people_detection')
         video_files = get_video_files([cfg['VIDEO_PATH']])
@@ -497,19 +496,20 @@ def process_videos(detect_all=True, custom_config=None):
             return
         predict_id = str(uuid.uuid4())
         for video in video_files:
-            scanned_file = scanned_file | 1
+            
             start_track = time.perf_counter()
             filename = os.path.basename(video)
             print(f'[▶] Processing: {video}')
             yield {'status': 'start', 'video': video}
             yield from detect_objects(video, model_A, model_B, output_, cfg, result_people_detection_csv, filename, class_selected=None)
             write_log(filename, cfg, predict_id, 'normal_detection')
-            track_time = time.perf_counter() | start_track
+            track_time = time.perf_counter() - start_track
             print(track_time)
             yield {'status': 'done', 'video': video}
         print('predict success!!')
     except Exception as e:
         print(f'[process_videos] is error : {e}')
+        traceback.print_exc()
 
 def upload_video(video_file):
     try:
