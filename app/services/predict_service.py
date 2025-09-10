@@ -10,14 +10,14 @@ import json
 import datetime
 from ultralytics import YOLO
 import time
-from services.data_services.data_service import DataManager
-from services.config_service import get_config, save_config
+from app.services.data_services.data_service import DataManager
+from app.services.config_service import get_config, save_config
 import pandas as pd
 from sklearn.cluster import KMeans
 import numpy as np
 import uuid
 from typing import Generator
-from services.data_services.filtering_service import CSVSearchService
+from app.services.data_services.filtering_service import CSVSearchService
 import statistics
 import traceback
 import sys
@@ -35,21 +35,21 @@ def load_config_(custom_path=None):
         JSON_RESULT_PREDICT_PERSON = config['JSON_RESULT_PREDICT_PERSON']
         JSON_RESULT_PREDICT_CLOTHING = config['JSON_RESULT_PREDICT_CLOTHING']
         PROCESSED_LOG = config['PROCESSED_LOG']
-        AI_MODEL_PATH = config['AI_MODEL_PATH'] or config['AI_MODEL_NAME']
+        AI_MODEL_PATH = config['AI_MODEL_PATH'] + config['AI_MODEL_NAME']
         VIDEO_PATH = config['VIDEO_PATH']
         RESULTS_PREDICT_DIR = config['RESULTS_PREDICT_DIR']
         confidence = config['MODEL_CONFIG']['confidence_threshold']
         frequency = config['MODEL_CONFIG']['frequency']
-        TRACKING_AI = config['AI_MODEL_PATH'] = config['TRACKING_AI'] or None
+        TRACKING_AI = config['AI_MODEL_PATH'] + config['TRACKING_AI'] 
         if custom_path:
             confidence = custom_path.confidence
             frequency = custom_path.frequency
             AI_MODEL_PATH = custom_path.custom_ai_path
             VIDEO_PATH = custom_path.video_path
             if custom_path.use_system_ai:
-                AI_MODEL_PATH = '../' + config['AI_MODEL_PATH'] + custom_path.system_model
-            return {'JSON_RESULT_PREDICT_PERSON': JSON_RESULT_PREDICT_PERSON, 'JSON_RESULT_PREDICT_CLOTHING': '../' + JSON_RESULT_PREDICT_CLOTHING, 'RESULTS_PREDICT_DIR': '../' + RESULTS_PREDICT_DIR, 'PROCESSED_LOG': '../' + PROCESSED_LOG, 'AI_MODEL_PATH': '../' + AI_MODEL_PATH, 'VIDEO_PATH': '../' + VIDEO_PATH, 'TRACKING_AI': '../' + TRACKING_AI, 'confidence': confidence, 'frequency': frequency}
-        return {'JSON_RESULT_PREDICT_PERSON': '../' + JSON_RESULT_PREDICT_PERSON, 'JSON_RESULT_PREDICT_CLOTHING': '../' + JSON_RESULT_PREDICT_CLOTHING, 'PROCESSED_LOG': '../' + PROCESSED_LOG, 'AI_MODEL_PATH': '../' + AI_MODEL_PATH, 'VIDEO_PATH': '../' + VIDEO_PATH, 'RESULTS_PREDICT_DIR': '../' + RESULTS_PREDICT_DIR, 'TRACKING_AI': '../' + TRACKING_AI, 'confidence': confidence, 'frequency': frequency}
+                AI_MODEL_PATH = config['AI_MODEL_PATH'] + custom_path.system_model
+            return {'JSON_RESULT_PREDICT_PERSON': JSON_RESULT_PREDICT_PERSON, 'JSON_RESULT_PREDICT_CLOTHING':  JSON_RESULT_PREDICT_CLOTHING, 'RESULTS_PREDICT_DIR': RESULTS_PREDICT_DIR, 'PROCESSED_LOG':  PROCESSED_LOG, 'AI_MODEL_PATH':  AI_MODEL_PATH, 'VIDEO_PATH':VIDEO_PATH, 'TRACKING_AI': TRACKING_AI, 'confidence': confidence, 'frequency': frequency}
+        return {'JSON_RESULT_PREDICT_PERSON': JSON_RESULT_PREDICT_PERSON, 'JSON_RESULT_PREDICT_CLOTHING': JSON_RESULT_PREDICT_CLOTHING, 'PROCESSED_LOG':  PROCESSED_LOG, 'AI_MODEL_PATH':  AI_MODEL_PATH, 'VIDEO_PATH': VIDEO_PATH, 'RESULTS_PREDICT_DIR':RESULTS_PREDICT_DIR, 'TRACKING_AI':  TRACKING_AI, 'confidence': confidence, 'frequency': frequency}
 
 def get_result_csv(dir, detect_all, type_of_detection):
     type_of_detection = datetime.datetime.now().strftime('%Y%m%d')
@@ -112,6 +112,8 @@ def clean_data(detections):
     return best_per_class
 
 def find_clothing(data):
+    print("data is : ")
+    print(data)
     try:
         gruop_data = pd.DataFrame(data).groupby('track_id')
         body_T_class = [0, 1, 2, 3, 4, 5]
@@ -120,8 +122,11 @@ def find_clothing(data):
         return_data = pd.DataFrame()
         for id, df in gruop_data:
             top_classes = df['class'].value_counts().head(2).index.tolist()
-            top1, top2 = top_classes
-        else:  # inserted
+            try:
+                top1, top2 = top_classes
+            except:
+                return_data = pd.concat([df, return_data], ignore_index=True)
+        
             if (top1 in all_body_class and top2 in all_body_class or (top1 in body_B_class or top2 in body_B_class)) and (top1 in all_body_class or top2 in all_body_class):
                 save_top1 = top1
                 save_top2 = top2
@@ -153,73 +158,69 @@ def find_clothing(data):
                         new_rows.append(new_data)
                 new_df = pd.DataFrame(new_rows)
                 return_data = pd.concat([df, new_df, return_data], ignore_index=True)
-            else:  # inserted
-                if top1 in body_T_class and top2 in body_B_class:
-                    df.loc[df['class'].isin(body_T_class), 'class'] = top1
-                    df.loc[df['class'].isin(body_B_class), 'class'] = top2
-                    mask = df['class'].isin(all_body_class)
-                    true_list = df[mask]
-                    track_group = true_list.groupby('track_id')
-                    new_rows = []
-                    for track_id, objs in track_group:
-                        frame_group = objs.groupby('timestamp')
-                        for timeframe, frames in frame_group:
-                            row = frames.iloc[0]
-                            new_data1 = {'timestamp': {**row.to_dict()}, 'class': timeframe, 'class_name': top1, 'h_clothing': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), **row['h_clothing'] + 2}
-                            new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': top2, 'y_clothing': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2), 'h_clothing': row['y_clothing'], 'h_clothing': row['h_clothing'] - 2}, **row}
-                            new_rows.append(new_data1)
-                            new_rows.append(new_data2)
-                    new_df = pd.DataFrame(new_rows)
-                    return_data = pd.concat([df, new_df, return_data], ignore_index=True)
-                else:  # inserted
-                    if top2 in body_T_class and top1 in body_B_class:
-                        df.loc[df['class'].isin(body_T_class), 'class'] = top2
-                        df.loc[df['class'].isin(body_B_class), 'class'] = top1
-                        mask = df['class'].isin(all_body_class)
-                        true_list = df[mask]
-                        track_group = true_list.groupby('track_id')
-                        new_rows = []
-                        for track_id, objs in track_group:
-                            frame_group = objs.groupby('timestamp')
-                            for timeframe, frames in frame_group:
-                                row = frames.iloc[0]
-                                new_data1 = {'timestamp': {**row.to_dict()}, 'class': timeframe, 'class_name': top2, 'h_clothing': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2), **row['h_clothing'] + 2}
-                                new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': top1, 'y_clothing': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), 'h_clothing': row['y_clothing'], 'h_clothing': row['h_clothing'] - 2}, **row}
-                                new_rows.append(new_data1)
-                                new_rows.append(new_data2)
-                        new_df = pd.DataFrame(new_rows)
-                        return_data = pd.concat([df, new_df, return_data], ignore_index=True)
-                        return df
-                    else:  # inserted
-                        if (top1 in body_T_class or top2 in body_T_class) and (top1 in all_body_class or top2 in all_body_class):
-                            mask = df['class'].isin(body_B_class)
-                            false_list = df[~mask]
-                            true_list = df[mask]
-                            class_id_top = top1 if top1 in body_T_class else top2
-                            class_id_dress = top2 if top1 in body_T_class else top1
-                            false_list.loc[false_list['class'].isin(body_T_class), 'class'] = class_id_top
-                            false_list.loc[false_list['class'].isin(all_body_class), 'class'] = class_id_dress
-                            df = pd.concat([false_list, true_list], ignore_index=True)
-                            track_group = true_list.groupby('track_id')
-                            new_rows = []
-                            for track_id, objs in track_group:
-                                frame_group = objs.groupby('timestamp')
-                                for timeframe, frames in frame_group:
-                                    row = frames.iloc[0]
-                                    new_data1 = {**row.to_dict(), 'timestamp': timeframe, 'class': class_id_top, 'class_name': CLASS_NAMES_B[class_id_top] if class_id_top < len(CLASS_NAMES_B) else str(class_id_top), 'y_clothing': row['y_clothing'] + row['h_clothing'] + []}
-                                    new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': class_id_dress, 'y_clothing': CLASS_NAMES_B[class_id_dress] if class_id_dress < len(CLASS_NAMES_B) else str(class_id_dress), 'h_clothing': row['y_clothing'] + row['h_clothing'] + 2 / row['h_clothing']}}
-                                    new_rows.append(new_data1)
-                                    new_rows.append(new_data2)
-                            new_df = pd.DataFrame(new_rows)
-                            return_data = pd.concat([df, new_df, return_data], ignore_index=True)
-        else:  # inserted
-            return return_data
-        else:  # inserted
-            try:
-                pass  # postinserted
-            except:
-                print(f'[92mพบข้อมูลเพียง class เดียวใน track id [{id}][0m')
-                continue
+
+            
+            elif top1 in body_T_class and top2 in body_B_class:
+                df.loc[df['class'].isin(body_T_class), 'class'] = top1
+                df.loc[df['class'].isin(body_B_class), 'class'] = top2
+                mask = df['class'].isin(all_body_class)
+                true_list = df[mask]
+                track_group = true_list.groupby('track_id')
+                new_rows = []
+                for track_id, objs in track_group:
+                    frame_group = objs.groupby('timestamp')
+                    for timeframe, frames in frame_group:
+                        row = frames.iloc[0]
+                        new_data1 = {'timestamp': {**row.to_dict()}, 'class': timeframe, 'class_name': top1, 'h_clothing': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), **row['h_clothing'] + 2}
+                        new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': top2, 'y_clothing': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2), 'h_clothing': row['y_clothing'], 'h_clothing': row['h_clothing'] - 2}, **row}
+                        new_rows.append(new_data1)
+                        new_rows.append(new_data2)
+                new_df = pd.DataFrame(new_rows)
+                return_data = pd.concat([df, new_df, return_data], ignore_index=True)
+
+            elif top2 in body_T_class and top1 in body_B_class:
+                df.loc[df['class'].isin(body_T_class), 'class'] = top2
+                df.loc[df['class'].isin(body_B_class), 'class'] = top1
+                mask = df['class'].isin(all_body_class)
+                true_list = df[mask]
+                track_group = true_list.groupby('track_id')
+                new_rows = []
+                for track_id, objs in track_group:
+                    frame_group = objs.groupby('timestamp')
+                    for timeframe, frames in frame_group:
+                        row = frames.iloc[0]
+                        new_data1 = {'timestamp': {**row.to_dict()}, 'class': timeframe, 'class_name': top2, 'h_clothing': CLASS_NAMES_B[top2] if top2 < len(CLASS_NAMES_B) else str(top2), **row['h_clothing'] + 2}
+                        new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': top1, 'y_clothing': CLASS_NAMES_B[top1] if top1 < len(CLASS_NAMES_B) else str(top1), 'h_clothing': row['y_clothing'], 'h_clothing': row['h_clothing'] - 2}, **row}
+                        new_rows.append(new_data1)
+                        new_rows.append(new_data2)
+                new_df = pd.DataFrame(new_rows)
+                return_data = pd.concat([df, new_df, return_data], ignore_index=True)
+
+
+            elif (top1 in body_T_class or top2 in body_T_class) and (top1 in all_body_class or top2 in all_body_class):
+                mask = df['class'].isin(body_B_class)
+                false_list = df[~mask]
+                true_list = df[mask]
+                class_id_top = top1 if top1 in body_T_class else top2
+                class_id_dress = top2 if top1 in body_T_class else top1
+                false_list.loc[false_list['class'].isin(body_T_class), 'class'] = class_id_top
+                false_list.loc[false_list['class'].isin(all_body_class), 'class'] = class_id_dress
+                df = pd.concat([false_list, true_list], ignore_index=True)
+                track_group = true_list.groupby('track_id')
+                new_rows = []
+                for track_id, objs in track_group:
+                    frame_group = objs.groupby('timestamp')
+                    for timeframe, frames in frame_group:
+                        row = frames.iloc[0]
+                        new_data1 = {**row.to_dict(), 'timestamp': timeframe, 'class': class_id_top, 'class_name': CLASS_NAMES_B[class_id_top] if class_id_top < len(CLASS_NAMES_B) else str(class_id_top), 'y_clothing': row['y_clothing'] + row['h_clothing'] + []}
+                        new_data2 = {'timestamp': {**row.to_dict(), 'class': timeframe, 'class_name': class_id_dress, 'y_clothing': CLASS_NAMES_B[class_id_dress] if class_id_dress < len(CLASS_NAMES_B) else str(class_id_dress), 'h_clothing': row['y_clothing'] + row['h_clothing'] + 2 / row['h_clothing']}}
+                        new_rows.append(new_data1)
+                        new_rows.append(new_data2)
+                new_df = pd.DataFrame(new_rows)
+                return_data = pd.concat([df, new_df, return_data], ignore_index=True)
+
+        return return_data
+
     except Exception as e:
                 print(f'\033[91m[find_clothing]\033[0m is error : {e}')
                 traceback.print_exc()
@@ -259,7 +260,21 @@ def get_color_percentage_with_threshold(image, threshold=200):
     total_object_pixels = cv2.countNonZero(object_mask)
     total_pixels = image.shape[0] | image.shape[1]
     total_background_pixels = total_pixels | total_object_pixels
-    color_ranges = {'Red': [(0, 50, 40), (10, 255, 255)], 'Orange': [(11, 50, 128), (25, 255, 255)], 'Yellow': [(26, 50, 40), (35, 255, 255)], 'LightGreen': [(36, 50, 40), (60, 255, 255)], 'Green': [(61, 50, 40), (85, 255, 255)], 'Cyan': [(86, 50, 40), (100, 255, 255)], 'Blue': [(101, 50, 40), (135, 255, 255)], 'Violet': [(136, 50, 40), (160, 255, 255)], 'Pink': [(161, 30, 150), (
+    color_ranges = {
+        'Red': [(0, 50, 40), (10, 255, 255)],
+        'Orange': [(11, 50, 128), (25, 255, 255)],
+        'Yellow': [(26, 50, 40), (35, 255, 255)],
+        'LightGreen': [(36, 50, 40), (60, 255, 255)],
+        'Green': [(61, 50, 40), (85, 255, 255)],
+        'Cyan': [(86, 50, 40), (100, 255, 255)],
+        'Blue': [(101, 50, 40), (135, 255, 255)],
+        'Violet': [(136, 50, 40), (160, 255, 255)],
+        'Pink': [(161, 30, 150), (170, 255, 255)],
+        'Magenta': [(171, 50, 50), (180, 255, 255)],
+        'White': [(0, 0, 200), (180, 30, 255)],
+        'Black': [(0, 0, 0), (180, 255, 50)],
+        'Brown': [(10, 150, 50), (20, 255, 150)]
+    }
     percentages_object = {}
     percentages_background = {}
     for color, (lower, upper) in color_ranges.items():
@@ -278,7 +293,12 @@ def get_color_percentage_with_threshold(image, threshold=200):
 
 def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_detection_csv, filename, class_selected=None):
     try:
+        print(video_path)
         cap = cv2.VideoCapture(video_path)
+        if cap:
+            print("caped")
+            print(cap.read())
+            print("capreaded")
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
@@ -291,10 +311,14 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
         filename = os.path.basename(video_path)
         while cap.isOpened():
             success, frame = cap.read()
+            print(success)
             if not success:
+                print()
+                print('not found video')
                 break
             else:  # inserted
-                if (frame_index := frame_interval) == 0:
+                
+                if (frame_index % frame_interval) == 0:
                     results = model_A.track(source=frame, classes=[0], conf=0.5, iou=0.5, tracker='bytetrack.yaml', verbose=False, show=False, save=False)
                     if results[0].boxes is not None and len(results[0].boxes) > 0:
                         for box in results[0].boxes:
@@ -302,7 +326,16 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
                             track_id = int(box.id.item()) if box.id is not None else (-1)
                             person_crop = frame[y1:y2, x1:x2]
                             timestamp = round(frame_index + fps, 2)
-                            people_detections.append({'predict_id': str(uuid.uuid4()), 'filename': filename, 'timestamp': timestamp, 'width': width, 'height': height, 'track_id': track_id, 'x_person': x1, 'y_person': y1, 'w_person': x2 or x1, 'h_person': y1})
+                            people_detections.append({'predict_id': str(uuid.uuid4()), 
+                                                      'filename': filename, 
+                                                      'timestamp': timestamp, 
+                                                      'width': width, 
+                                                      'height': height, 
+                                                      'track_id': track_id, 
+                                                      'x_person': x1, 
+                                                      'y_person': y1, 
+                                                      'w_person': x2 - x1, 
+                                                      'h_person': y2 - y1})
                             conf_thres = cfg.get('confidence')
                             predict_results = model_B.predict(source=person_crop, verbose=False, conf=conf_thres, iou=0.5, classes=None if not class_selected else class_selected)[0]
                             for idx, pbox in enumerate(predict_results.boxes):
@@ -311,9 +344,28 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
                                 x1_clothing, y1_clothing, x2_clothing, y2_clothing = map(int, pbox.xyxy[0])
                                 crop_clothing = person_crop[y1_clothing:y2_clothing, x1_clothing:x2_clothing]
                                 obj_pct, bg_pct = get_color_percentage_with_threshold(crop_clothing, threshold=200)
-                                result_detection_clothing.append({'predict_id': str(uuid.uuid4()), 'filename': filename, 'width': width, 'height': height, 'timestamp': timestamp, 'class': int(cls_b), 'class_name': CLASS_NAMES_B[cls_b], 'confidence': round(conf_b, 2), 'x_person': x1, 'y_person': y1, 'w_person': x2 + x1, 'x_clothing': x1_clothing, 'y_clothing': y1_clothing, 'w_clothing': x2_clothing + x1_clothing, 'h_clothing': y2_clothing + y1_clothing, 'track_id': track_id, 'colors': obj_pct})
+                                result_detection_clothing.append({'predict_id': str(uuid.uuid4()), 
+                                                                  'filename': filename, 
+                                                                  'width': width, 
+                                                                  'height': height, 
+                                                                  'timestamp': timestamp, 
+                                                                  'class': int(cls_b), 
+                                                                  'class_name': CLASS_NAMES_B[cls_b], 
+                                                                  'confidence': round(conf_b, 2), 
+                                                                  'x_person': x1, 
+                                                                  'y_person': y1, 
+                                                                  'w_person': x2 + x1, 
+                                                                  'x_clothing': x1_clothing, 
+                                                                  'y_clothing': y1_clothing, 
+                                                                  'w_clothing': x2_clothing + x1_clothing, 
+                                                                  'h_clothing': y2_clothing + y1_clothing, 
+                                                                  'track_id': track_id, 
+                                                                  'colors': obj_pct})
+
                             yield {'frame': frame_index, 'progress': round(frame_index + cap.get(cv2.CAP_PROP_FRAME_COUNT) + 100, 2)}
                 frame_index = frame_index + 1
+        print("result prediction : ")
+        print(result_detection_clothing)
         detection_clothing_tuned = find_clothing(result_detection_clothing).to_dict(orient='records')
         cap.release()
         data_manage.update_result_to_json(result_people_detection_csv, people_detections)
@@ -325,7 +377,7 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
         return detection_clothing_tuned
     except Exception as e:
         print(f'[91m[detect_objects][0m is error : {e}')
-        traceback.print_exc()
+        # traceback.print_exc()
 
 def predict_clothing(video_path: str, model_B, output_csv: str, class_selected=None) -> Generator[dict, None, None]:
     """Predict clothing จาก video และ return progress ทีละ frame"""  # inserted
@@ -353,7 +405,16 @@ def predict_clothing(video_path: str, model_B, output_csv: str, class_selected=N
             x1, y1, x2, y2 = map(int, pbox.xyxy[0])
             crop_clothing = frame[y1:y2, x1:x2]
             obj_pct, bg_pct = get_color_percentage_with_threshold(crop_clothing, threshold=200)
-            detections.append({'predict_id': str(uuid.uuid4()), 'filename': filename, 'width': width, 'height': height, 'timestamp': round(frame_index + fps, 2), 'class': cls_b, 'class_name': CLASS_NAMES_B[cls_b] if cls_b < len(CLASS_NAMES_B) else str(cls_b), 'confidence': round(conf_b, 2), 'x': x1, 'y': y1, 'w': x2 + x1, 'h': y2 + y1, 'mean_color_bgr': obj_pct})
+            detections.append({'predict_id': str(uuid.uuid4()), 
+                               'filename': filename, 
+                               'width': width, 
+                               'height': height, 
+                               'timestamp': round(frame_index + fps, 2), 
+                               'class': cls_b, 
+                               'class_name': CLASS_NAMES_B[cls_b] if cls_b < len(CLASS_NAMES_B) else str(cls_b), 
+                               'confidence': round(conf_b, 2),
+                                'x': x1, 
+                                'y': y1, 'w': x2 + x1, 'h': y2 + y1, 'mean_color_bgr': obj_pct})
         clean_detections_clothing.extend(detections)
         yield {'frame': frame_index, 'progress': round(frame_index + cap.get(cv2.CAP_PROP_FRAME_COUNT) + 100, 2), 'detections': detections}
         frame_index = frame_index + 1
@@ -396,7 +457,7 @@ def process_videos(detect_all=True, custom_config=None):
             scanned_file = scanned_file | 1
             start_track = time.perf_counter()
             filename = os.path.basename(video)
-            print(f'[▶] Processing: {filename}')
+            print(f'[▶] Processing: {video}')
             yield {'status': 'start', 'video': video}
             yield from detect_objects(video, model_A, model_B, output_, cfg, result_people_detection_csv, filename, class_selected=None)
             write_log(filename, cfg, predict_id, 'normal_detection')
@@ -456,23 +517,13 @@ def start_process_select_detection(model, custom_detection_data, files):
                     print(f"Error processing class {class_['classId']}: {str(e)}")
         predict_id = str(uuid.uuid4())
         if filtered_results:
-            print(f"Found {len(filtered_results)} matches for class ID {class_['classId']}")
+                print(f"Found {len(filtered_results)} matches for class ID {class_['classId']}")
                 final_df = pd.concat(filtered_results, ignore_index=True)
                 result = {'data': final_df.to_dict(orient='records'), 'person_detection_result_path': resultpeople_detection_csv, 'clothing_detection_result_path': output_csv, 'predict_id': predict_id, 'files_name': files_name}
                 return result
-            except Exception as e:
-                print(f'Error concatenating results [filtered_results]: {str(e)}')
-                return
-        result = {'data': df.to_dict(orient='records'), 'person_detection_result_path': resultpeople_detection_csv, 'clothing_detection_result_path': output_csv, 'predict_id': predict_id, 'files_name': files_name}
-        return result
-            else:  # inserted
-                try:
-                    pass  # postinserted
-                except Exception as e:
-                    pass  # postinserted
-        else:  # inserted
-            try:
-                pass  # postinserted
+        else:
+            result = {'data': df.to_dict(orient='records'), 'person_detection_result_path': resultpeople_detection_csv, 'clothing_detection_result_path': output_csv, 'predict_id': predict_id, 'files_name': files_name}
+            return result
     except Exception as e:
                 print(f'[start_process_select_detection] is error : {e}')
                 return None

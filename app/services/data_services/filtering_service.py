@@ -1,8 +1,8 @@
 import pandas as pd
 from typing import List, Optional
-from services.config_service import load_config
-from services.data_services.data_service import DataManager
-from services.color_service import ColorCheck
+from app.services.config_service import load_config
+from app.services.data_services.data_service import DataManager
+from app.services.color_service import ColorCheck
 
 
 class CSVSearchService:

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from controllers.data_controller import router as data_router
-from controllers.prediction_controller import router as predict_router
+from app.controllers.data_controller import router as data_router
+from app.controllers.prediction_controller import router as predict_router
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="My API with FastAPI & Classes") # type: ignore

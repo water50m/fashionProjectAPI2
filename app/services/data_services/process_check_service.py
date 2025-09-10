@@ -1,4 +1,4 @@
-from services.config_service import load_config
+from app.services.config_service import load_config
 import os
 
 

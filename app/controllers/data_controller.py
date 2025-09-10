@@ -1,9 +1,9 @@
 from fastapi import APIRouter 
-from services.data_services.filtering_service import CSVSearchService
-from services.data_services.data_service import DataManager
-from schemas.data_schema import preData,resultVideoDetail,pathToResult,AnalyzeVideo,CustomDetectionDataSave,SelectDetectionDataGet,GetDetectionSelectData
-from services.data_services.process_check_service import scan_all
-from services.config_service import get_config
+from app.services.data_services.filtering_service import CSVSearchService
+from app.services.data_services.data_service import DataManager
+from app.schemas.data_schema import preData,resultVideoDetail,pathToResult,AnalyzeVideo,CustomDetectionDataSave,SelectDetectionDataGet,GetDetectionSelectData
+from app.services.data_services.process_check_service import scan_all
+from app.services.config_service import get_config
 
 config = get_config()
 

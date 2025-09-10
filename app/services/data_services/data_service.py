@@ -1,8 +1,8 @@
 import json
 import os
 import csv
-from services.config_service import load_config
-from services.color_service import ColorCheck
+from app.services.config_service import load_config
+from app.services.color_service import ColorCheck
 import cv2
 import pandas as pd
 import datetime

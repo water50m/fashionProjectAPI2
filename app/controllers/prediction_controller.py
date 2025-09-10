@@ -1,7 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
-from services.predict_service import process_videos,start_process_select_detection
-from schemas.data_schema import setupPredice
+from app.services.predict_service import process_videos,start_process_select_detection
+from app.schemas.data_schema import setupPredice
 from typing import List
 router = APIRouter()
 
