@@ -265,7 +265,9 @@ def find_clothing(data):
                         new_rows.append(new_data2)
                 new_df = pd.DataFrame(new_rows)
                 return_data = pd.concat([df, new_df, return_data], ignore_index=True)
-
+            else:
+                return_data = pd.concat([df, return_data], ignore_index=True)
+                
         return return_data
 
     except Exception as e:
@@ -343,17 +345,18 @@ def get_color_percentage_with_threshold(image, threshold=200):
 
 def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_detection_csv, filename, class_selected=None):
     try:
-        print(video_path)
+
         cap = cv2.VideoCapture(video_path)
+        total_frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         frame_index = 0
         result_detection_clothing = []
-        people_detections = []
+        people_detections = [] 
 
         seen_track_ids = set()
-        frame_interval = int(fps + cfg['frequency'])
+        frame_interval = int(fps * cfg['frequency'])
         filename = os.path.basename(video_path)
         while cap.isOpened():
             success, frame = cap.read()
@@ -368,7 +371,7 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
                             x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                             track_id = int(box.id.item()) if box.id is not None else (-1)
                             person_crop = frame[y1:y2, x1:x2]
-                            timestamp = round(frame_index + fps, 2)
+                            timestamp = frame_index / fps
                             people_detections.append({'predict_id': str(uuid.uuid4()), 
                                                       'filename': filename, 
                                                       'timestamp': timestamp, 
@@ -397,18 +400,22 @@ def detect_objects(video_path, model_A, model_B, output_csv, cfg, result_people_
                                                                   'confidence': round(conf_b, 2), 
                                                                   'x_person': x1, 
                                                                   'y_person': y1, 
-                                                                  'w_person': x2 + x1, 
+                                                                  'w_person': x2 - x1, 
+                                                                  'h_person': y2 - y1, 
                                                                   'x_clothing': x1_clothing, 
                                                                   'y_clothing': y1_clothing, 
-                                                                  'w_clothing': x2_clothing + x1_clothing, 
-                                                                  'h_clothing': y2_clothing + y1_clothing, 
+                                                                  'w_clothing': x2_clothing - x1_clothing, 
+                                                                  'h_clothing': y2_clothing - y1_clothing, 
                                                                   'track_id': track_id, 
                                                                   'colors': obj_pct})
+                            progress = (frame_index / total_frames) * 100
+                            yield {'progress': round(progress, 2) }
 
-                            yield {'frame': frame_index, 'progress': round(frame_index + cap.get(cv2.CAP_PROP_FRAME_COUNT) + 100, 2)}
                 frame_index = frame_index + 1
-
-        detection_clothing_tuned = find_clothing(result_detection_clothing).to_dict(orient='records')
+        print("befor",len(result_detection_clothing))
+        tuned_data = find_clothing(result_detection_clothing)
+        print("after",len(tuned_data)) 
+        detection_clothing_tuned = tuned_data.to_dict(orient='records')
         cap.release()
         data_manage.update_result_to_json(result_people_detection_csv, people_detections)
         data_manage.update_result_to_json(output_csv, detection_clothing_tuned)
@@ -456,7 +463,7 @@ def predict_clothing(video_path: str, model_B, output_csv: str, class_selected=N
                                'class_name': CLASS_NAMES_B[cls_b] if cls_b < len(CLASS_NAMES_B) else str(cls_b), 
                                'confidence': round(conf_b, 2),
                                 'x': x1, 
-                                'y': y1, 'w': x2 + x1, 'h': y2 + y1, 'mean_color_bgr': obj_pct})
+                                'y': y1, 'w': x2 - x1, 'h': y2 - y1, 'mean_color_bgr': obj_pct})
         clean_detections_clothing.extend(detections)
         yield {'frame': frame_index, 'progress': round(frame_index + cap.get(cv2.CAP_PROP_FRAME_COUNT) + 100, 2), 'detections': detections}
         frame_index = frame_index + 1
@@ -509,7 +516,7 @@ def process_videos(detect_all=True, custom_config=None):
         print('predict success!!')
     except Exception as e:
         print(f'[process_videos] is error : {e}')
-        traceback.print_exc()
+        # traceback.print_exc()
 
 def upload_video(video_file):
     try:

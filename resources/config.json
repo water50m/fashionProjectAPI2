@@ -1,15 +1,15 @@
 {
     "CONFIG_FILE_PATH": "resources\\config.json",
     "RESULTS_PREDICT_DIR": "resources\\result_prediction\\",
-    "JSON_RESULT_PREDICT_CLOTHING": "resources\\result_prediction\\clothing_detection\\results_20250910_20250910_3.json",
-    "JSON_RESULT_PREDICT_PERSON": "resources\\result_prediction\\people_detection\\results_20250910_20250910_3.json",
+    "JSON_RESULT_PREDICT_CLOTHING": "resources\\result_prediction\\clothing_detection\\results_20250911_20250911_1.json",
+    "JSON_RESULT_PREDICT_PERSON": "resources\\result_prediction\\people_detection\\results_20250911_20250911_1.json",
     "RESULT_PREDICT_DIR": "resources\\result_prediction\\",
     "CUSTOM_RESULT_PREDICT_DIR": "resources\\result_prediction_custom\\",
     "VIDEO_PATH": "resources\\videos\\",
     "UPLOAD_VIDEO_PATH": "resources\\videos\\uploads\\",
     "AI_MODEL_PATH": "resources\\models\\",
     "AI_MODEL_NAME": "detect_10k.pt",
-    "TRACKING_AI": "yolov11n.pt",
+    "TRACKING_AI": "yolo11m.pt",
     "PROCESSED_LOG": "resources\\process_log\\processed_log.csv",
     "API_CONFIG": {
         "host": "12.0.0.1",
@@ -34,7 +34,7 @@
     },
     "MODEL_CONFIG": {
         "confidence_threshold": 0.3,
-        "frequency": 0.5,
+        "frequency": 0.1,
         "detectingAll": false,
         "iou_threshold": 0.59,
         "max_detections": 1000

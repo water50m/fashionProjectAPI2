@@ -61,7 +61,7 @@ class VideoPlayer:
 
             # --- วาด detection ที่ตรง timestamp ---
             for det in self.detections:
-                if abs(det["timestamp"] - timestamp) < 0.3:  # เผื่อเวลา ±0.3s
+                if abs(det["timestamp"] - timestamp) < 0.09:  # เผื่อเวลา ±0.3s
                     # กรอบคน
                     x, y, w, h = det["x_person"], det["y_person"], det["w_person"], det["h_person"]
                     x = int(x * scale_x)
@@ -71,15 +71,15 @@ class VideoPlayer:
                     cv2.rectangle(frame, (x, y), (x+w, y+h), (0,255,0), 2)
 
                     # กรอบเสื้อผ้า
-                    x2 = int((det["x_clothing"] + det["x_person"]) * scale_x)
-                    y2 = int((det["y_clothing"] + det["y_person"]) * scale_y)
-                    w2 = int(det["w_clothing"] * scale_x)
-                    h2 = int(det["h_clothing"] * scale_y)
-                    cv2.rectangle(frame, (x2, y2), (x2+w2, y2+h2), (255,0,0), 2)
+                    # x2 = int((det["x_clothing"] + det["x_person"]) * scale_x)
+                    # y2 = int((det["y_clothing"] + det["y_person"]) * scale_y)
+                    # w2 = int(det["w_clothing"] * scale_x)
+                    # h2 = int(det["h_clothing"] * scale_y)
+                    # cv2.rectangle(frame, (x2, y2), (x2+w2, y2+h2), (255,0,0), 2)
 
                     # Label
-                    label = f"{det['class_name']} ({det['confidence']:.2f})"
-                    cv2.putText(frame, label, (x2, y2-10),
+                    label = f"{det['track_id']} ({det['confidence']:.2f})"
+                    cv2.putText(frame, label, (x, y-10+h),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
 
             # แปลง BGR -> RGB
@@ -95,12 +95,12 @@ class VideoPlayer:
 # ---------------- ใช้งาน ----------------
 if __name__ == "__main__":
     # โหลด detections จาก JSON (แบบ list[dict])
-    with open(r"E:\ALL_CODE\python\fashion-project\resources\result_prediction\clothing_detection\results_clothing_detection_20250907_1.json", "r", encoding="utf-8") as f:
+    with open(r"E:\ALL_CODE\python\fashion-project\resources\result_prediction\clothing_detection\results_20250911_20250911_1.json", "r", encoding="utf-8") as f:
         detections = [json.loads(line) for line in f if line.strip()]  # NDJSON
 
     df = pd.DataFrame(detections)
     video_select = df[df['filename'] == "4p-c0-new.mp4"]
-
+    print(len(video_select))
     root = tk.Tk()
-    app = VideoPlayer(root, r"E:\ALL_CODE\python\fashion-project\resources\videos\uploads\4p-c0-new.mp4", video_select)
+    app = VideoPlayer(root, r"E:\ALL_CODE\python\fashion-project\resources\videos\4p-c0-new.mp4", video_select)
     root.mainloop()
