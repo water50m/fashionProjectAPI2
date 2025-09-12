@@ -6,8 +6,9 @@ from pathlib import Path
 import math
 import torch
 import numpy as np
-from deep_sort_pytorch.utils.parser import get_config
-from deep_sort_pytorch.deep_sort import DeepSort
+import uuid
+from app.services.tracking_service.deep_sort_pytorch.utils.parser import get_config
+from app.services.tracking_service.deep_sort_pytorch.deep_sort import DeepSort
 from collections import deque
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLO root directory
@@ -15,12 +16,15 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-from models.common import DetectMultiBackend
-from utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
-from utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
+from app.services.tracking_service.models.common import DetectMultiBackend
+from app.services.tracking_service.utils.dataloaders import IMG_FORMATS, VID_FORMATS, LoadImages, LoadScreenshots, LoadStreams
+from app.services.tracking_service.utils.general import (LOGGER, Profile, check_file, check_img_size, check_imshow, check_requirements, colorstr, cv2,
                            increment_path, non_max_suppression, print_args, scale_boxes, strip_optimizer, xyxy2xywh)
-from utils.plots import Annotator, colors, save_one_box
-from utils.torch_utils import select_device, smart_inference_mode
+from app.services.tracking_service.utils.plots import Annotator, colors, save_one_box
+from app.services.tracking_service.utils.torch_utils import select_device, smart_inference_mode
+from app.services.predict_service import Detection
+
+from app.services.config_service import save_config
 
 def initialize_deepsort():
     # Create the Deep SORT configuration object and load settings from the YAML file
@@ -44,7 +48,7 @@ def initialize_deepsort():
         )
 
     return deepsort
-
+clothing_detection = Detection()
 deepsort = initialize_deepsort()
 data_deque = {}
 def classNames(classname):
@@ -84,20 +88,22 @@ def draw_boxes(frame, bbox_xyxy, draw_trails, className, identities=None, catego
     for key in list(data_deque):
       if key not in identities:
         data_deque.pop(key)
-
+    show_obj = []
     for i, box in enumerate(bbox_xyxy):
         x1, y1, x2, y2 = [int(i) for i in box]
         x1 += offset[0]
         y1 += offset[0]
         x2 += offset[0]
         y2 += offset[0]
-        crop = frame[y1:y2, x1:x2]
+        
+        
         #Find the center point of the bounding box
         center = int((x1+x2)/2), int((y1+y2)/2)
         cat = int(categories[i]) if categories is not None else 0
         color = colorLabels(cat)
         #color = [255,0,0]#compute_color_labels(cat)
         id = int(identities[i]) if identities is not  None else 0
+        show_obj.append([str(id),x1,y1,x2,y2])
         # create new buffer for new object
         if id not in data_deque:
           data_deque[id] = deque(maxlen= 64)
@@ -120,9 +126,52 @@ def draw_boxes(frame, bbox_xyxy, draw_trails, className, identities=None, catego
                   thickness = int(np.sqrt(64 / float(i + i)) * 1.5)
                   # draw trails
                   cv2.line(frame, data_deque[id][i - 1], data_deque[id][i], color, thickness)    
-    return frame
+    return show_obj
 
+windows = {}
+max_windows = 5
+window_spacing = 60  # ช่องว่างระหว่างหน้าต่าง
+window_width = 320   # กำหนดขนาด width ของแต่ละ window
+window_height = 240  # กำหนดขนาด height ของแต่ละ window
+def update_windows(imframe,objs):
+    global windows
 
+    current_names = [obj[1] for obj in objs if obj[1]]
+
+    # 1️⃣ ปิดหน้าต่างที่ไม่มีในรอบนี้
+    for win_name in list(windows.keys()):
+        if win_name not in current_names:
+            cv2.destroyWindow(win_name)
+            del windows[win_name]
+
+    # 2️⃣ เปิดหรือ update window ใหม่
+    for i, obj in enumerate(objs):
+        x1,y1,x2,y2 = obj[1:5]
+        w = (x2-x1)*2
+        h = (y2-y1)*2
+        name = obj[0]
+        frame = imframe[y1:y2, x1:x2]
+
+        if not name or frame is None:
+            continue
+
+        if name not in windows:
+            # ถ้าเต็ม 5 หน้าต่างแล้ว ให้ข้าม
+            if len(windows) >= max_windows:
+                print(f"Max windows reached. Skipping {name}")
+                continue
+               
+            # หา position ของ window ใหม่
+            x = (len(windows) % max_windows) * (w + window_spacing)
+            y = 50  # สามารถปรับตำแหน่ง vertical ได้
+            cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+            cv2.moveWindow(name, window_width, window_height)
+            windows[name] = {'pos': (x, y)}
+
+        # update frame ใน window เดิม
+        cv2.imshow(name, frame)
+
+    cv2.waitKey(1)  # ต้องมีเพื่อให้หน้าต่าง update
 
 @smart_inference_mode()
 def run(
@@ -148,7 +197,8 @@ def run(
         dnn=False,  # use OpenCV DNN for ONNX inference
         vid_stride=1,  # video frame-rate stride
         draw_trails = False,
-        class_name = ''
+        class_name = '',
+        side_win = False,
 ):
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
@@ -170,6 +220,10 @@ def run(
     imgsz = check_img_size(imgsz, s=stride)  # check image size
 
     className = classNames(class_name)
+    # for prediction
+    save_result_dir = clothing_detection.config.get('RESULTS_PREDICT_DIR')
+    save_result_path = clothing_detection.get_result_csv(save_result_dir + 'clothing_detection', True, 'clothing_detection')
+    predict_id = str(uuid.uuid4())
     # Dataloader
     bs = 1  # batch_size
     if webcam:
@@ -186,6 +240,9 @@ def run(
     model.warmup(imgsz=(1 if pt or model.triton else bs, 3, *imgsz))  # warmup
     seen, windows, dt = 0, [], (Profile(), Profile(), Profile())
     for path, im, im0s, vid_cap, s in dataset:
+        
+        frame_idx_video = int(vid_cap.get(cv2.CAP_PROP_POS_FRAMES)) 
+
         with dt[0]:
             im = torch.from_numpy(im).to(model.device)
             im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
@@ -207,7 +264,9 @@ def run(
 
         # Second-stage classifier (optional)
         # pred = utils.general.apply_classifier(pred, classifier_model, im, im0s)
-
+        
+        # keep data wait for save
+        list_result = []
         # Process predictions
         for i, det in enumerate(pred):  # per image
             seen += 1
@@ -223,6 +282,7 @@ def run(
             s += '%gx%g ' % im.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             ims = im0.copy()
+            objs = []
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_boxes(im.shape[2:], det[:, :4], im0.shape).round()
@@ -257,7 +317,10 @@ def run(
                     bbox_xyxy = outputs[:, :4]
                     identities = outputs[:, -2]
                     object_id = outputs[:, -1]
-                    draw_boxes(ims, bbox_xyxy, draw_trails, className, identities, object_id)
+                    result = clothing_detection.predict_img_clothing(filename,bbox_xyxy,ims,identities)
+                    if result:
+                        list_result.append(result)
+                    objs = draw_boxes(ims, bbox_xyxy, draw_trails, className, identities, object_id)
 
 
 
@@ -269,6 +332,10 @@ def run(
                     cv2.resizeWindow(str(p), ims.shape[1], ims.shape[0])
                 cv2.imshow(str(p), ims)
                 cv2.waitKey(1)  # 1 millisecond
+
+            if side_win:
+                if len(objs)>=1 and (frame_idx_video % 20 == 0):
+                    update_windows(ims,objs)
             # Save results (image with detections)
             if save_img:
                 if vid_path[i] != save_path:  # new video
@@ -284,6 +351,14 @@ def run(
                     save_path = str(Path(save_path).with_suffix('.mp4'))  # force *.mp4 suffix on results videos
                     vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                 vid_writer[i].write(ims)
+
+        if len(list_result)>=1 and mode=="save-result":
+            clothing_detection.data_manage.save_json(save_path, list_result)
+
+            clothing_detection.config.update({'JSON_RESULT_PREDICT_CLOTHING': save_path})
+
+            save_config(clothing_detection.config)
+            clothing_detection.write_log(filename,clothing_detection.config,predict_id,'normal_detection')
 
         # Print time (inference-only)
         LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
@@ -317,6 +392,7 @@ def parse_opt():
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
     parser.add_argument('--class-name', default='')
+    parser.add_argument('--side-win',action='store_true')
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     print_args(vars(opt))
