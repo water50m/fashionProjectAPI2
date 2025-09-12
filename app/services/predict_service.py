@@ -439,7 +439,7 @@ class Detection:
             print(f'[91m[detect_objects][0m is error : {e}')
             # traceback.print_exc()
 
-    def predict_img_clothing(self, bbox_xyxy, image,  save_path , track_id ,class_selected=None) -> Generator[dict, None, None]:
+    def predict_img_clothing(self,filename, bbox_xyxy, image , track_id ,class_selected=None) -> Generator[dict, None, None]:
         """Predict clothing จาก video และ return progress ทีละ frame"""  # inserted
         
 
@@ -461,7 +461,7 @@ class Detection:
                     crop_clothing = cap[y1:y2, x1:x2]
                     obj_pct, bg_pct = self.get_color_percentage_with_threshold(crop_clothing, threshold=200)
                     detections.append({ 'predict_id': str(uuid.uuid4()), 
-                                        'filename': "filename", 
+                                        'filename': filename, 
                                         'timestamp': "", 
                                         'class': cls_b, 
                                         'class_name': self.CLASS_NAMES_B[cls_b] if cls_b < len(self.CLASS_NAMES_B) else str(cls_b), 
@@ -476,12 +476,7 @@ class Detection:
                 clean_detections_clothing.extend(detections)
                 # yield {'frame': frame_index, 'progress': round(frame_index + cap.get(cv2.CAP_PROP_FRAME_COUNT) + 100, 2), 'detections': detections}
         return clean_detections_clothing
-        self.data_manage.save_json(save_path, clean_detections_clothing)
-        if class_selected is None:
-            config.update({'CSV_CLOTHING_RESULT': save_path})
-        else:  # inserted
-            config.update({'CSV_CUSTOM_CLOTHING_RESULT': save_path})
-        save_config(config)
+        
 
     def save_result(self, output_csv, fieldnames, result):
         file_exists = os.path.exists(output_csv)
