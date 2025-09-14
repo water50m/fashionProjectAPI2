@@ -26,7 +26,7 @@ data = r"E:\ALL_CODE\python\fashion-project\lib\deepsort\data\coco.yaml"
 
 
 def prediction(xyxy,identities,frame):
-    try:
+    try:    
         xp1,yp1,xp2,yp2 = xyxy
         crop = frame[yp1:yp2, xp1:xp2]
         results= model_pred_clothing.predict(crop)[0]
@@ -39,17 +39,19 @@ def prediction(xyxy,identities,frame):
                         'track_id':identities,
                     }
         if results:
-            for i,box in results:
-                xc1,yc1,xc2,yc2 = box.xyxy
-                cls = box.cls
-                conf = box.conf
-                crop_clothing = crop[xc1:yc1 ,xc2:yc2]
+            boxes = results.boxes
+            for box in boxes:
+                xc1,yc1,xc2,yc2 = map(int, box.xyxy[0].cpu().numpy())
+                cls = int(box.cls.cpu().item())        # class index เป็น int
+                conf = float(box.conf.cpu().item())    # confidence เป็น float
+                crop_clothing = crop[yc1:yc2 ,xc1:xc2]
+                crop_clothing = np.ascontiguousarray(crop_clothing)
                 list_color = colorC.get_color_percentage_with_threshold(crop_clothing)
                 clothing_list.append({ 
                                         **object_data,
                                         'predict_id': str(uuid.uuid4()), 
                                         'class': cls, 
-                                        'class_name': model_pred_clothing.name[cls], 
+                                        'class_name': model_pred_clothing.names[cls], 
                                         'confidence': round(conf, 2), 
                                         'x_clothing': xc1,
                                         'y_clothing': yc1,
@@ -74,24 +76,26 @@ def prediction(xyxy,identities,frame):
         return clothing_list
     except Exception as e:
         print(f'\033[91m[detection]\033[0m is error : {e}')
+        traceback.print_exc()
 
 def get_result_csv(dir, detect_all, type_of_detection):
         date_str = datetime.datetime.now().strftime('%Y%m%d')
         output_dir = Path(dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         if detect_all:
-            base_name = output_dir / f"results_{type_of_detection}_{date_str}.json"
+            base_name = output_dir / f"results_{type_of_detection}_{date_str}_1.json"
             if not Path(base_name).exists():
                 return str(base_name)
-            counter = 1
+            counter = 2
             while True:
                 new_name = output_dir /  f'results_{type_of_detection}_{date_str}_{counter}.json'
-                if not  not Path(new_name).exists():
+                if not Path(new_name).exists():
                     return str(new_name)
                 counter = counter + 1
-        files = [f for f in [p.name for p in output_dir.iterdir()] if f.startswith(f'results_{type_of_detection}_{date_str}')]
-        if files:
-            return output_dir / sorted(files)[(-1)]
+        else:
+            files = [f for f in [p.name for p in output_dir.iterdir()] if f.startswith(f'results_{type_of_detection}_{date_str}')]
+            if files:
+                return output_dir / sorted(files)[(-1)]
         return str(output_dir / f'results_{type_of_detection}_{type_of_detection}.json')
 
 def get_video_files( folders):
@@ -141,25 +145,6 @@ def write_log( filename, process_id, process_type):
     except Exception as e:
         print(f'\033[91m[write_log]\033[0m is error : {e}')
 
-
-def predict_ctrl(data_batch,filename,source):
-    try:
-        all_result = []
-        h, w = get_wh(source)
-        for batch in data_batch:
-            bbox_xyxy,identities,ims = batch[0],batch[1],batch[2]
-            for i, box in enumerate(bbox_xyxy):
-                all_result.extend(prediction(box,identities[i],ims[i]))
-        df = pd.DataFrame(all_result)
-        df['filename'] = filename
-        df['w_vid'] = w
-        df['h_vid'] = h
-        return df
-
-    except Exception as e:
-        print(f'\033[91m[predict_ctrl]\033[0m is error : {e}')
-
-
 def get_wh(source):
     """
     Return (width, height) of the source.
@@ -207,9 +192,31 @@ def get_wh(source):
 
     return w, h
 
+def predict_ctrl(data_batch,filename,source):
+    try:
+
+        all_result = []
+        h, w = get_wh(source)
+        i=0
+        for bbox_xyxy, identities, ims in data_batch:
+            i+=1
+            for i, box in enumerate(bbox_xyxy):
+                all_result.extend(prediction(box,identities[i],ims))
+        if all_result:
+            df = pd.DataFrame(all_result)
+            df['filename'] = filename
+            df['w_vid'] = w
+            df['h_vid'] = h
+            return df
+
+    except Exception as e:
+        print(f'\033[95m[predict_ctrl]\033[0m is error : {e}')
+
 
 def processing_videos():
+        
         try:
+            process_status:bool = False
             process_id = str(uuid.uuid4())
             dir = config.get('RESULTS_PREDICT_DIR')
             path_to_save = get_result_csv(dir + 'clothing_detection', True, 'clothing_detection')
@@ -224,18 +231,22 @@ def processing_videos():
                 start_track = time.perf_counter()
                 filename = Path(video).name
                 print(f'[▶] Processing: {video}')
-                print(main_model_path)
 
                 predict = run(weights=main_model_path,source= video,data=data,classes=0,pred_clothing=True)
 
                 if not predict.empty:
+                    num_rows = predict.shape[0]
+                    print('predicted data ',num_rows)
                     predict['process_id'] = process_id
-                    manager.update_result_to_json(path_to_save,predict.todict(orient='records'))
+                    manager.update_result_to_json(path_to_save,predict.to_dict(orient='records'))
                     write_log(filename, process_id, 'normal_detection')
                     track_time = time.perf_counter() - start_track
                     print(track_time)
-
-            print('predict success!!')
+                    process_status=True
+            if process_status:
+                print('predict success!!')
+            else:
+                print('process detection fail!!')
         except Exception as e:
             print(f'[processing_videos] is error : {e}')
             traceback.print_exc()
