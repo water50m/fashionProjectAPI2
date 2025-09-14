@@ -7,6 +7,7 @@ import cv2
 import pandas as pd
 import datetime
 import uuid
+from pathlib import Path
 
 CONFIG = load_config()
 
@@ -102,10 +103,23 @@ class DataManager:
             print(f"[update_json] error: {e}")
 
     def update_result_to_json(self, filepath, new_data: list[dict]):
-            # โหลดข้อมูลเดิม
-        with open(filepath, "a", encoding="utf-8") as f:
-            lines = [json.dumps(item, ensure_ascii=False) for item in new_data]
-            f.write("\n".join(lines) + "\n")
+        path = Path(filepath)
+        filename = path.name
+        if path.exists():
+            # โหลด data เดิม
+            with path.open("r", encoding="utf-8") as f:
+                old_data = json.load(f)
+        else:
+            old_data = []
+
+        # รวมข้อมูลใหม่
+        all_data = old_data + new_data
+
+        # เขียนไฟล์กลับ
+        with path.open("w", encoding="utf-8") as f:
+            json.dump(all_data, f, ensure_ascii=False, indent=2)
+        print('save data to file name: ',filename)
+        print('path to file :',path)
 
 
     # ===== Save CSV =====

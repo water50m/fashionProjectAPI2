@@ -1,4 +1,6 @@
 import pandas as pd
+import cv2
+import numpy as np
 
 
 class ColorCheck:
@@ -52,3 +54,45 @@ class ColorCheck:
             return pd.DataFrame(selected_list)
         except Exception as e:
             print(f"[\033[91mprepare_and_find_similar_colors\033[0m] is error : {e}")
+
+    def get_color_percentage_with_threshold(image, threshold=200):
+        """   แยก object จาก background ด้วย threshold
+        image: BGR image
+        threshold: ค่าความสว่างเพื่อแยก background (0-255)\n    """  # inserted
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        _, object_mask = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
+        total_object_pixels = cv2.countNonZero(object_mask)
+        height, width = image.shape[:2]
+        total_pixels = height * width  # จำนวน pixel ทั้งหมด
+        total_background_pixels = total_pixels - total_object_pixels  # pixel ที่เป็นพื้นหลัง
+        color_ranges = {
+            'Red': [(0, 50, 40), (10, 255, 255)],
+            'Orange': [(11, 50, 128), (25, 255, 255)],
+            'Yellow': [(26, 50, 40), (35, 255, 255)],
+            'LightGreen': [(36, 50, 40), (60, 255, 255)],
+            'Green': [(61, 50, 40), (85, 255, 255)],
+            'Cyan': [(86, 50, 40), (100, 255, 255)],
+            'Blue': [(101, 50, 40), (135, 255, 255)],
+            'Violet': [(136, 50, 40), (160, 255, 255)],
+            'Pink': [(161, 30, 150), (170, 255, 255)],
+            'Magenta': [(171, 50, 50), (180, 255, 255)],
+            'White': [(0, 0, 200), (180, 30, 255)],
+            'Black': [(0, 0, 0), (180, 255, 50)],
+            'Brown': [(10, 150, 50), (20, 255, 150)]
+        }
+        percentages_object = {}
+        percentages_background = {}
+        for color, (lower, upper) in color_ranges.items():
+            lower = np.array(lower, dtype=np.uint8)
+            upper = np.array(upper, dtype=np.uint8)
+            mask = cv2.inRange(hsv, lower, upper)
+            object_count = cv2.countNonZero(cv2.bitwise_and(mask, mask, mask=object_mask))
+            percentages_object[color] = total_object_pixels + 0 + (object_count + total_object_pixels) + 100 if total_object_pixels > 0 else 0
+            background_mask = cv2.bitwise_not(object_mask)
+            background_count = cv2.countNonZero(cv2.bitwise_and(mask, mask, mask=background_mask))
+            percentages_background[color] = 100 if total_background_pixels > 0 else 0
+        if 'Red' in percentages_object and 'Red2' in percentages_object:
+            percentages_object['Red'] = percentages_object.pop('Red2')
+            percentages_background['Red'] = percentages_background.pop('Red2')
+        return (percentages_object, percentages_background)

@@ -1,55 +1,244 @@
-import cv2
 from ultralytics import YOLO
-from app.services.tracking_lib.use_func_track import usethis
+from app.services.color_service import ColorCheck
+from app.services.config_service import load_config
+from app.services.data_services.data_service import DataManager
+from lib.deepsort.tracking import run
+import uuid
+import time
+from pathlib import Path
+import datetime
+import csv
+import pandas as pd
+import numpy as np
+import cv2
+from mss import mss
+from PIL import Image
+import traceback
 
 
-def run_predict():
-    # โหลดโมเดล
-    model_custom = YOLO(r"E:\ALL_CODE\python\fashion-project\resources\models\yolo11m.pt").to("cuda")
+manager = DataManager()
+colorC = ColorCheck()
+config = load_config()
+model_pred_clothing = YOLO(config.get("AI_MODEL_PATH")+config.get("AI_MODEL_NAME"))
+main_model_path =config.get("AI_MODEL_PATH")+'yolo11m.pt'
 
-    # โหลด tracker
-    
-    # เปิดวิดีโอ (0 = webcam)
-    video_path = r"E:\ALL_CODE\nextjs\fashion_project_1\public\videos\uploads\4p-c0-new.mp4"
-    cap = cv2.VideoCapture(video_path)
+data = r"E:\ALL_CODE\python\fashion-project\lib\deepsort\data\coco.yaml"
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame = cv2.resize(frame, (1280, 720))
-        # ขั้นแรก detect class [0] ด้วย pretrained model
-        results = model_custom.predict(
-            source=frame,
-            classes=[0],     # เฉพาะ class 0 (เช่น person)
-            conf=0.5,
-            verbose=False
-        )[0]
-        # เอาผลไปเข้า tracker
-        tracks = usethis(results,frame,0)
+
+def prediction(xyxy,identities,frame):
+    try:
+        xp1,yp1,xp2,yp2 = xyxy
+        crop = frame[yp1:yp2, xp1:xp2]
+        results= model_pred_clothing.predict(crop)[0]
+        clothing_list=[]
+        object_data = { 
+                        'x_person': xp1, 
+                        'y_person': yp1,
+                        'w_person': xp2 - xp1, 
+                        'h_person': yp2 - yp1, 
+                        'track_id':identities,
+                    }
+        if results:
+            for i,box in results:
+                xc1,yc1,xc2,yc2 = box.xyxy
+                cls = box.cls
+                conf = box.conf
+                crop_clothing = crop[xc1:yc1 ,xc2:yc2]
+                list_color = colorC.get_color_percentage_with_threshold(crop_clothing)
+                clothing_list.append({ 
+                                        **object_data,
+                                        'predict_id': str(uuid.uuid4()), 
+                                        'class': cls, 
+                                        'class_name': model_pred_clothing.name[cls], 
+                                        'confidence': round(conf, 2), 
+                                        'x_clothing': xc1,
+                                        'y_clothing': yc1,
+                                        'w_clothing': xc2 - xc1,
+                                        'h_clothing': yc2 - yc1,
+                                        'mean_color_bgr': list_color
+                                    })
+        else:
+            clothing_list.append({ 
+                                        **object_data,
+                                        'predict_id': str(uuid.uuid4()), 
+                                        'class': 'undifined', 
+                                        'class_name': 'undifined', 
+                                        'confidence': 'undifined', 
+                                        'x_clothing': 0,
+                                        'y_clothing': 0,
+                                        'w_clothing': 0,
+                                        'h_clothing': 0,
+                                        'mean_color_bgr': []
+                                    })
+
+        return clothing_list
+    except Exception as e:
+        print(f'\033[91m[detection]\033[0m is error : {e}')
+
+def get_result_csv(dir, detect_all, type_of_detection):
+        date_str = datetime.datetime.now().strftime('%Y%m%d')
+        output_dir = Path(dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if detect_all:
+            base_name = output_dir / f"results_{type_of_detection}_{date_str}.json"
+            if not Path(base_name).exists():
+                return str(base_name)
+            counter = 1
+            while True:
+                new_name = output_dir /  f'results_{type_of_detection}_{date_str}_{counter}.json'
+                if not  not Path(new_name).exists():
+                    return str(new_name)
+                counter = counter + 1
+        files = [f for f in [p.name for p in output_dir.iterdir()] if f.startswith(f'results_{type_of_detection}_{date_str}')]
+        if files:
+            return output_dir / sorted(files)[(-1)]
+        return str(output_dir / f'results_{type_of_detection}_{type_of_detection}.json')
+
+def get_video_files( folders):
+    video_files = []
+    for folder in folders:
+        print(folder)
+        for file in Path(folder).rglob("*"):
+            if file.suffix.lower() in (".mp4", ".avi", ".mov"):
+                video_files.append(str(file))
+    print(f"[get_video_files] พบ {len(video_files)} ไฟล์")
+    return video_files
+
+
+def write_log( filename, process_id, process_type):
+    try:
+        log_path = Path(config['PROCESSED_LOG'])
         
-        # วนลูปผลลัพธ์จาก pretrained
-        for t in tracks:
+        # สร้างโฟลเดอร์ถ้ายังไม่มี
+        if log_path.parent:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
 
-            x1, y1, x2, y2 = [int(i) for i in t[:4]]  # bbox เป็น int
-            frame_idx = int(t[4])                       # track_id
-            conf = round(float(t[5]), 2)                        # confidence ยังเป็น float
-            cls = int(t[6])
-            track_id = int(t[7])
-            print(t,' confi -> ',conf)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0),2)
-            cv2.putText(frame, f"ID {track_id} conf {conf}", (x1,y1+20),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+        headers = [
+            'predict_id', 'process_id', 'filename', 'datetime',
+            'person_detection_result_path', 'clothing_detection_result_path',
+            'save_result_name', 'process_type'
+        ]
+
+        # เขียน header ถ้าไฟล์ยังไม่ถูกสร้าง
+        if not log_path.exists():
+            with log_path.open('w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(headers)
+
+        # เขียน log ใหม่ (append)
+        with log_path.open('a', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow([
+                process_id,
+                str(uuid.uuid4()),
+                filename,
+                datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                config['JSON_RESULT_PREDICT_PERSON'],
+                config['JSON_RESULT_PREDICT_CLOTHING'],
+                'detect',
+                process_type
+            ])
+    except Exception as e:
+        print(f'\033[91m[write_log]\033[0m is error : {e}')
 
 
+def predict_ctrl(data_batch,filename,source):
+    try:
+        all_result = []
+        h, w = get_wh(source)
+        for batch in data_batch:
+            bbox_xyxy,identities,ims = batch[0],batch[1],batch[2]
+            for i, box in enumerate(bbox_xyxy):
+                all_result.extend(prediction(box,identities[i],ims[i]))
+        df = pd.DataFrame(all_result)
+        df['filename'] = filename
+        df['w_vid'] = w
+        df['h_vid'] = h
+        return df
+
+    except Exception as e:
+        print(f'\033[91m[predict_ctrl]\033[0m is error : {e}')
 
 
-        # แสดงวิดีโอ real-time
-        cv2.imshow("tracking", frame)
+def get_wh(source):
+    """
+    Return (width, height) of the source.
+    Supports image, video, webcam (numeric), URL stream, screenshot.
+    """
+    IMG_FORMATS = ['jpg','jpeg','png','bmp','tif','tiff','dng','webp','mpo']
+    VID_FORMATS = ['mp4','mov','avi','mkv','wmv','flv','mpg','mpeg','ts']
+    source = str(source)
+    is_file = Path(source).suffix[1:].lower() in (IMG_FORMATS + VID_FORMATS)
+    is_url = source.lower().startswith(('rtsp://','rtmp://','http://','https://'))
+    webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
+    screenshot = source.lower().startswith('screen')
 
-        # กด q เพื่อออก
-        if cv2.waitKey(1) & 0xFF == ord("q"):
-            break
+    if is_file:  # Image or video file
+        suffix = Path(source).suffix[1:].lower()
+        if suffix in IMG_FORMATS:  # Image
+            img = Image.open(source)
+            w, h = img.size
+        else:  # Video
+            cap = cv2.VideoCapture(source)
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
 
-    cap.release()
-    cv2.destroyAllWindows()
+    elif webcam:  # Webcam or stream
+        cap = cv2.VideoCapture(int(source) if source.isnumeric() else source)
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+
+    elif screenshot:  # Screen capture
+        with mss() as sct:
+            monitor = sct.monitors[0]  # full screen
+            w = monitor['width']
+            h = monitor['height']
+
+    elif is_url:  # URL stream (not a file)
+        cap = cv2.VideoCapture(source)
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+
+    else:
+        raise ValueError(f"Unknown source type: {source}")
+
+    return w, h
+
+
+def processing_videos():
+        try:
+            process_id = str(uuid.uuid4())
+            dir = config.get('RESULTS_PREDICT_DIR')
+            path_to_save = get_result_csv(dir + 'clothing_detection', True, 'clothing_detection')
+            print('see result at :\033[93m',path_to_save,'\033[0m')
+            video_files = get_video_files([config['VIDEO_PATH']])
+            if len(video_files) == 0:
+                print('no video')
+                return
+            
+            for video in [video_files[1]]:
+                
+                start_track = time.perf_counter()
+                filename = Path(video).name
+                print(f'[▶] Processing: {video}')
+                print(main_model_path)
+
+                predict = run(weights=main_model_path,source= video,data=data,classes=0,pred_clothing=True)
+
+                if not predict.empty:
+                    predict['process_id'] = process_id
+                    manager.update_result_to_json(path_to_save,predict.todict(orient='records'))
+                    write_log(filename, process_id, 'normal_detection')
+                    track_time = time.perf_counter() - start_track
+                    print(track_time)
+
+            print('predict success!!')
+        except Exception as e:
+            print(f'[processing_videos] is error : {e}')
+            traceback.print_exc()
+
+if __name__ == 'main':
+    processing_videos()

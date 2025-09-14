@@ -63,22 +63,22 @@ class Detection:
             return {'JSON_RESULT_PREDICT_PERSON': JSON_RESULT_PREDICT_PERSON, 'JSON_RESULT_PREDICT_CLOTHING': JSON_RESULT_PREDICT_CLOTHING, 'PROCESSED_LOG':  PROCESSED_LOG, 'AI_MODEL_PATH':  AI_MODEL_PATH, 'VIDEO_PATH': VIDEO_PATH, 'RESULTS_PREDICT_DIR':RESULTS_PREDICT_DIR, 'TRACKING_AI':  TRACKING_AI, 'confidence': confidence, 'frequency': frequency}
 
     def get_result_csv(self, dir, detect_all, type_of_detection):
-        type_of_detection = datetime.datetime.now().strftime('%Y%m%d')
+        date_str = datetime.datetime.now().strftime('%Y%m%d')
         os.makedirs(dir, exist_ok=True)
         if detect_all:
-            base_name = os.path.join(dir, f'results_{type_of_detection}_{type_of_detection}.json')
+            base_name = os.path.join(dir, f'results_{type_of_detection}_{date_str}.json')
             if not os.path.exists(base_name):
                 return base_name
             counter = 1
             while True:
-                new_name = os.path.join(dir, f'results_{type_of_detection}_{type_of_detection}_{counter}.json')
+                new_name = os.path.join(dir, f'results_{type_of_detection}_{date_str}_{counter}.json')
                 if not os.path.exists(new_name):
                     return new_name
                 counter = counter + 1
         files = [f for f in os.listdir(dir) if f.startswith(f'results_{type_of_detection}_{date_str}')]
         if files:
             return os.path.join(dir, sorted(files)[(-1)])
-        return os.path.join(dir, f'results_{type_of_detection}_{type_of_detection}.json')
+        return os.path.join(dir, f'results_{type_of_detection}_{date_str}.json')
 
     def load_processed_files(self):
         config = self.load_config_()
