@@ -23,15 +23,18 @@ model_pred_clothing = YOLO(config.get("AI_MODEL_PATH")+config.get("AI_MODEL_NAME
 main_model_path =config.get("AI_MODEL_PATH")+'yolo11m.pt'
 
 data = r"E:\ALL_CODE\python\fashion-project\lib\deepsort\data\coco.yaml"
+CLASS_NAMES_CLOTHING = ['short sleeve top', 'long sleeve top', 'short sleeve outwear', 'long sleeve outwear', 'vest', 'sling', 'shorts', 'trousers', 'skirt', 'short sleeve dress', 'long sleeve dress', 'vest dress', 'sling dress']
 
 
-def prediction(xyxy,identities,frame):
+def prediction(xyxy,identities,frame,conut_frame):
     try:    
         xp1,yp1,xp2,yp2 = xyxy
         crop = frame[yp1:yp2, xp1:xp2]
-        results= model_pred_clothing.predict(crop)[0]
+        results= model_pred_clothing.predict(crop, verbose=False)[0]
         clothing_list=[]
         object_data = { 
+                        'objectin':False,
+                        'frame':conut_frame,
                         'x_person': xp1, 
                         'y_person': yp1,
                         'w_person': xp2 - xp1, 
@@ -40,6 +43,14 @@ def prediction(xyxy,identities,frame):
                     }
         if results:
             boxes = results.boxes
+            all_obj = results.boxes.cls.cpu().numpy()
+            all_conf = results.boxes.conf.cpu().numpy()
+            if len(all_obj) > 2:
+                s=''
+                for i,cls_ in enumerate(all_obj):
+                    s+=f'ID: \033[93m{identities}\033[0m class: \033[92m{model_pred_clothing.names[cls_]}\033[0m | conf: \033[91m[{round(all_conf[i],2)}]\033[0m | '
+                print(s)
+                print("------------------------------------------------------------------------------------------------------")
             for box in boxes:
                 xc1,yc1,xc2,yc2 = map(int, box.xyxy[0].cpu().numpy())
                 cls = int(box.cls.cpu().item())        # class index เป็น int
@@ -49,8 +60,9 @@ def prediction(xyxy,identities,frame):
                 list_color = colorC.get_color_percentage_with_threshold(crop_clothing)
                 clothing_list.append({ 
                                         **object_data,
+                                        'objectin':True,
                                         'predict_id': str(uuid.uuid4()), 
-                                        'class': cls, 
+                                        'class_id': cls, 
                                         'class_name': model_pred_clothing.names[cls], 
                                         'confidence': round(conf, 2), 
                                         'x_clothing': xc1,
@@ -61,22 +73,47 @@ def prediction(xyxy,identities,frame):
                                     })
         else:
             clothing_list.append({ 
-                                        **object_data,
-                                        'predict_id': str(uuid.uuid4()), 
-                                        'class': 'undifined', 
-                                        'class_name': 'undifined', 
-                                        'confidence': 'undifined', 
-                                        'x_clothing': 0,
-                                        'y_clothing': 0,
-                                        'w_clothing': 0,
-                                        'h_clothing': 0,
-                                        'mean_color_bgr': []
-                                    })
+                                    **object_data,
+                                    'predict_id': str(uuid.uuid4()), 
+                                    'class_id': 'undifined', 
+                                    'class_name': 'undifined', 
+                                    'confidence': 0, 
+                                    'x_clothing': 0,
+                                    'y_clothing': 0,
+                                    'w_clothing': 0,
+                                    'h_clothing': 0,
+                                    'mean_color_bgr': []
+                                })
 
         return clothing_list
     except Exception as e:
         print(f'\033[91m[detection]\033[0m is error : {e}')
         traceback.print_exc()
+def fill_the_space(data):
+    try:
+        df = pd.DataFrame(data)
+        row_latest = None
+        for row in df.itertuples():
+            if row.class_id != True:
+                row_latest = row
+            else:
+                if row_latest is not None:
+                    df.loc[row.Index]['objectin'] == True
+                    df.loc[row.Index]['class_id'] == row_latest.class_id
+                    df.loc[row.Index]['class_name'] == row_latest.class_name
+                    df.loc[row.Index]['confidence'] == row_latest.confidence
+                    df.loc[row.Index]['x_clothing'] == row_latest.x_clothing
+                    df.loc[row.Index]['y_clothing'] == row_latest.y_clothing
+                    df.loc[row.Index]['w_clothing'] == row_latest.w_clothing
+                    df.loc[row.Index]['h_clothing'] == row_latest.h_clothing
+                    df.loc[row.Index]['mean_color_bgr'] == row_latest.mean_color_bgr
+        return df
+
+    except Exception as e:
+        print(f"[fill_the_space] is erroe : {e}")
+        traceback.print_exc()
+
+
 
 def get_result_csv(dir, detect_all, type_of_detection):
         date_str = datetime.datetime.now().strftime('%Y%m%d')
@@ -150,67 +187,81 @@ def get_wh(source):
     Return (width, height) of the source.
     Supports image, video, webcam (numeric), URL stream, screenshot.
     """
-    IMG_FORMATS = ['jpg','jpeg','png','bmp','tif','tiff','dng','webp','mpo']
-    VID_FORMATS = ['mp4','mov','avi','mkv','wmv','flv','mpg','mpeg','ts']
-    source = str(source)
-    is_file = Path(source).suffix[1:].lower() in (IMG_FORMATS + VID_FORMATS)
-    is_url = source.lower().startswith(('rtsp://','rtmp://','http://','https://'))
-    webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
-    screenshot = source.lower().startswith('screen')
+    try:
+        IMG_FORMATS = ['jpg','jpeg','png','bmp','tif','tiff','dng','webp','mpo']
+        VID_FORMATS = ['mp4','mov','avi','mkv','wmv','flv','mpg','mpeg','ts']
+        source = str(source)
+        is_file = Path(source).suffix[1:].lower() in (IMG_FORMATS + VID_FORMATS)
+        is_url = source.lower().startswith(('rtsp://','rtmp://','http://','https://'))
+        webcam = source.isnumeric() or source.endswith('.txt') or (is_url and not is_file)
+        screenshot = source.lower().startswith('screen')
 
-    if is_file:  # Image or video file
-        suffix = Path(source).suffix[1:].lower()
-        if suffix in IMG_FORMATS:  # Image
-            img = Image.open(source)
-            w, h = img.size
-        else:  # Video
+        if is_file:  # Image or video file
+            suffix = Path(source).suffix[1:].lower()
+            if suffix in IMG_FORMATS:  # Image
+                img = Image.open(source)
+                w, h = img.size
+            else:  # Video
+                cap = cv2.VideoCapture(source)
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.release()
+
+        elif webcam:  # Webcam or stream
+            cap = cv2.VideoCapture(int(source) if source.isnumeric() else source)
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
+
+        elif screenshot:  # Screen capture
+            with mss() as sct:
+                monitor = sct.monitors[0]  # full screen
+                w = monitor['width']
+                h = monitor['height']
+
+        elif is_url:  # URL stream (not a file)
             cap = cv2.VideoCapture(source)
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             cap.release()
 
-    elif webcam:  # Webcam or stream
-        cap = cv2.VideoCapture(int(source) if source.isnumeric() else source)
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
+        else:
+            raise ValueError(f"Unknown source type: {source}")
 
-    elif screenshot:  # Screen capture
-        with mss() as sct:
-            monitor = sct.monitors[0]  # full screen
-            w = monitor['width']
-            h = monitor['height']
-
-    elif is_url:  # URL stream (not a file)
-        cap = cv2.VideoCapture(source)
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
-
-    else:
-        raise ValueError(f"Unknown source type: {source}")
-
-    return w, h
+        return w, h
+    except Exception as e:
+        print(f"[get_wh] is error : {e}")
 
 def predict_ctrl(data_batch,filename,source):
     try:
-
-        all_result = []
+        
         h, w = get_wh(source)
-        i=0
-        for bbox_xyxy, identities, ims in data_batch:
-            i+=1
-            for i, box in enumerate(bbox_xyxy):
-                all_result.extend(prediction(box,identities[i],ims))
-        if all_result:
-            df = pd.DataFrame(all_result)
-            df['filename'] = filename
-            df['w_vid'] = w
-            df['h_vid'] = h
-            return df
+        data = pd.DataFrame(data_batch, columns=["bbox_xyxy", "identities", "ims", "frame"])
+        data["identity_key"] = data["identities"].apply(lambda x: x[0])
+        datagroup = data.groupby("identity_key")
+        all_result = pd.DataFrame()
+        for group_value, group_df in datagroup:
+            track_gruop = []
+            for row in group_df.itertuples():
+                bbox_xyxy   = row.bbox_xyxy
+                ims         = row.ims
+                count_frame = row.frame
+                identity_key = row.identity_key
+                for i, box in enumerate(bbox_xyxy):
+                    track_gruop.extend(prediction(box,identity_key,ims,count_frame))
+            if track_gruop is not None:
+                df = pd.DataFrame(track_gruop)
+                df['filename'] = filename
+                df['w_vid'] = w
+                df['h_vid'] = h
+                # tuned = fill_the_space(df)
+                all_result = pd.concat([df, all_result], ignore_index=True)  
+        return all_result
 
     except Exception as e:
         print(f'\033[95m[predict_ctrl]\033[0m is error : {e}')
+        traceback.print_exc()
+
 
 
 def processing_videos():
@@ -226,7 +277,7 @@ def processing_videos():
                 print('no video')
                 return
             
-            for video in [video_files[1]]:
+            for video in [video_files[0]]:
                 
                 start_track = time.perf_counter()
                 filename = Path(video).name
@@ -249,7 +300,7 @@ def processing_videos():
                 print('process detection fail!!')
         except Exception as e:
             print(f'[processing_videos] is error : {e}')
-            traceback.print_exc()
+            # traceback.print_exc()
 
 if __name__ == 'main':
     processing_videos()
