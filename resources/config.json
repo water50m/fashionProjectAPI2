@@ -8,7 +8,7 @@
     "VIDEO_PATH": "resources\\videos\\",
     "UPLOAD_VIDEO_PATH": "resources\\videos\\uploads\\",
     "AI_MODEL_PATH": "resources\\models\\",
-    "AI_MODEL_NAME": "detect_10k.pt",
+    "AI_MODEL_NAME": "detect10k_model_m.pt",
     "TRACKING_AI": "yolo11m.pt",
     "PROCESSED_LOG": "resources\\process_log\\processed_log.csv",
     "API_CONFIG": {

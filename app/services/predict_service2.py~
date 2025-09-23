@@ -19,9 +19,9 @@ import traceback
 manager = DataManager()
 colorC = ColorCheck()
 config = load_config()
-model_pred_clothing = YOLO(config.get("AI_MODEL_PATH")+config.get("AI_MODEL_NAME"))
+model_pred_clothing = YOLO(config.get"AI_MODEL_PATH")+config.get("AI_MODEL_NAME"))
 main_model_path =config.get("AI_MODEL_PATH")+'yolo11m.pt'
-
+print('clothing model : ',config.get('AI_MODDEL_NAME'))
 data = r"E:\ALL_CODE\python\fashion-project\lib\deepsort\data\coco.yaml"
 CLASS_NAMES_CLOTHING = ['short sleeve top', 'long sleeve top', 'short sleeve outwear', 'long sleeve outwear', 'vest', 'sling', 'shorts', 'trousers', 'skirt', 'short sleeve dress', 'long sleeve dress', 'vest dress', 'sling dress']
 
@@ -48,7 +48,7 @@ def prediction(xyxy,identities,frame,conut_frame):
             if len(all_obj) > 2:
                 s=''
                 for i,cls_ in enumerate(all_obj):
-                    s+=f'ID: \033[93m{identities}\033[0m class: \033[92m{92mmodel_pred_clothing.names[cls_]}\033[0m | conf: \033[91m[{round(all_conf[i],2)}]\033[0m | '
+                    s+=f'ID: \033[93m{identities}\033[0m class: \033[92m{model_pred_clothing.names[cls_]}\033[0m | conf: \033[91m[{round(all_conf[i],2)}]\033[0m | '
                 print(s)
                 print("------------------------------------------------------------------------------------------------------")
             for box in boxes:

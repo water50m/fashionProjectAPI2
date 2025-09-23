@@ -14,6 +14,7 @@ import cv2
 from mss import mss
 from PIL import Image
 import traceback
+import math
 
 
 manager = DataManager()
@@ -21,7 +22,7 @@ colorC = ColorCheck()
 config = load_config()
 model_pred_clothing = YOLO(config.get("AI_MODEL_PATH")+config.get("AI_MODEL_NAME"))
 main_model_path =config.get("AI_MODEL_PATH")+'yolo11m.pt'
-
+print('clothing model : ',config.get('AI_MODDEL_NAME'))
 data = r"E:\ALL_CODE\python\fashion-project\lib\deepsort\data\coco.yaml"
 CLASS_NAMES_CLOTHING = ['short sleeve top', 'long sleeve top', 'short sleeve outwear', 'long sleeve outwear', 'vest', 'sling', 'shorts', 'trousers', 'skirt', 'short sleeve dress', 'long sleeve dress', 'vest dress', 'sling dress']
 
@@ -30,7 +31,7 @@ def prediction(xyxy,identities,frame,conut_frame):
     try:    
         xp1,yp1,xp2,yp2 = xyxy
         crop = frame[yp1:yp2, xp1:xp2]
-        results= model_pred_clothing.predict(crop, verbose=False)[0]
+        results= model_pred_clothing.predict(crop, verbose=False, conf=0.5, iou=0.5)[0]
         clothing_list=[]
         object_data = { 
                         'objectin':False,
@@ -45,10 +46,16 @@ def prediction(xyxy,identities,frame,conut_frame):
             boxes = results.boxes
             all_obj = results.boxes.cls.cpu().numpy()
             all_conf = results.boxes.conf.cpu().numpy()
+            # หาตำแหน่ง index ของค่าความมั่นใจมากที่สุด 2 อันดับ
+            top_idx = np.argsort(all_conf)[-2:]   # [-2:] = สองตัวท้ายสุด (ค่ามากสุด)
+
+            # ดึง class และ confidence ตาม index ที่เจอ
+            top_obj = all_obj[top_idx]
+            top_conf = all_conf[top_idx]
             if len(all_obj) > 2:
                 s=''
                 for i,cls_ in enumerate(all_obj):
-                    s+=f'ID: \033[93m{identities}\033[0m class: \033[92m{model_pred_clothing.names[cls_]}\033[0m | conf: \033[91m[{round(all_conf[i],2)}]\033[0m | '
+                    s+=f'frame: {conut_frame}ID: \033[93m{identities}\033[0m class: \033[92m{model_pred_clothing.names[cls_]}\033[0m | conf: \033[91m[{round(all_conf[i],2)}]\033[0m | '
                 print(s)
                 print("------------------------------------------------------------------------------------------------------")
             for box in boxes:
@@ -56,7 +63,7 @@ def prediction(xyxy,identities,frame,conut_frame):
                 cls = int(box.cls.cpu().item())        # class index เป็น int
                 conf = float(box.conf.cpu().item())    # confidence เป็น float
                 crop_clothing = crop[yc1:yc2 ,xc1:xc2]
-                crop_clothing = np.ascontiguousarray(crop_clothing)
+                # crop_clothing = np.ascontiguousarray(crop_clothing)
                 list_color = colorC.get_color_percentage_with_threshold(crop_clothing)
                 clothing_list.append({ 
                                         **object_data,
@@ -69,7 +76,7 @@ def prediction(xyxy,identities,frame,conut_frame):
                                         'y_clothing': yc1,
                                         'w_clothing': xc2 - xc1,
                                         'h_clothing': yc2 - yc1,
-                                        'mean_color_bgr': list_color
+                                        'colors': list_color
                                     })
         else:
             clothing_list.append({ 
@@ -82,7 +89,7 @@ def prediction(xyxy,identities,frame,conut_frame):
                                     'y_clothing': 0,
                                     'w_clothing': 0,
                                     'h_clothing': 0,
-                                    'mean_color_bgr': []
+                                    'colors': []
                                 })
 
         return clothing_list
@@ -115,7 +122,7 @@ def fill_the_space(data):
 
 
 
-def get_result_csv(dir, detect_all, type_of_detection):
+def get_result_path(dir, detect_all, type_of_detection):
         date_str = datetime.datetime.now().strftime('%Y%m%d')
         output_dir = Path(dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -234,21 +241,25 @@ def get_wh(source):
 
 def predict_ctrl(data_batch,filename,source):
     try:
-        
+        # data = [[[data1],[data2],frame],[[data1],[data2],frame]]
         h, w = get_wh(source)
-        data = pd.DataFrame(data_batch, columns=["bbox_xyxy", "identities", "ims", "frame"])
-        data["identity_key"] = data["identities"].apply(lambda x: x[0])
-        datagroup = data.groupby("identity_key")
-        all_result = pd.DataFrame()
-        for group_value, group_df in datagroup:
+        # data = pd.DataFrame(data_batch, columns=["bbox_xyxy", "identities", "ims", "frame"])
+        # print(data[["bbox_xyxy", "identities", "frame"]][:10])
+        # return
+        all_result=pd.DataFrame()
+        for item in data_batch:
+            box_xyxy,identitys,ims,frames = item
             track_gruop = []
-            for row in group_df.itertuples():
-                bbox_xyxy   = row.bbox_xyxy
-                ims         = row.ims
-                count_frame = row.frame
-                identity_key = row.identity_key
-                for i, box in enumerate(bbox_xyxy):
-                    track_gruop.extend(prediction(box,identity_key,ims,count_frame))
+            for idx,id in enumerate(identitys):
+                box = box_xyxy[idx]
+                xp1,yp1,xp2,yp2 = box
+                identity = id
+                img = ims
+                count_frame = frames
+                size_box = math.dist((xp1,yp1),(xp2,yp2))
+
+                track_gruop.extend(prediction(box,identity,img,count_frame))
+
             if track_gruop is not None:
                 df = pd.DataFrame(track_gruop)
                 df['filename'] = filename
@@ -257,6 +268,9 @@ def predict_ctrl(data_batch,filename,source):
                 # tuned = fill_the_space(df)
                 all_result = pd.concat([df, all_result], ignore_index=True)  
         return all_result
+
+
+        
 
     except Exception as e:
         print(f'\033[95m[predict_ctrl]\033[0m is error : {e}')
@@ -270,7 +284,7 @@ def processing_videos():
             process_status:bool = False
             process_id = str(uuid.uuid4())
             dir = config.get('RESULTS_PREDICT_DIR')
-            path_to_save = get_result_csv(dir + 'clothing_detection', True, 'clothing_detection')
+            path_to_save = get_result_path(dir + 'clothing_detection', True, 'clothing_detection')
             print('see result at :\033[93m',path_to_save,'\033[0m')
             video_files = get_video_files([config['VIDEO_PATH']])
             if len(video_files) == 0:
