@@ -68,20 +68,21 @@ class ColorCheck:
             total_pixels = height * width  # จำนวน pixel ทั้งหมด
             total_background_pixels = total_pixels - total_object_pixels  # pixel ที่เป็นพื้นหลัง
             color_ranges = {
-                'Red': [(0, 50, 40), (10, 255, 255)],
-                'Orange': [(11, 50, 128), (25, 255, 255)],
-                'Yellow': [(26, 50, 40), (35, 255, 255)],
-                'LightGreen': [(36, 50, 40), (60, 255, 255)],
-                'Green': [(61, 50, 40), (85, 255, 255)],
-                'Cyan': [(86, 50, 40), (100, 255, 255)],
-                'Blue': [(101, 50, 40), (135, 255, 255)],
-                'Violet': [(136, 50, 40), (160, 255, 255)],
-                'Pink': [(161, 30, 150), (170, 255, 255)],
-                'Magenta': [(171, 50, 50), (180, 255, 255)],
-                'White': [(0, 0, 200), (180, 30, 255)],
-                'Black': [(0, 0, 0), (180, 255, 50)],
-                'Brown': [(10, 150, 50), (20, 255, 150)]
-            }
+                    'Red': [(0, 50, 40), (10, 255, 255)],
+                    'Red2': [(171, 50, 50), (180, 255, 255)],
+                    'Yellow': [(26, 50, 40), (35, 255, 255)],
+                    'LightGreen': [(36, 50, 40), (60, 255, 255)],
+                    'Green': [(61, 50, 40), (85, 255, 255)],
+                    'Cyan': [(86, 50, 40), (100, 255, 255)],
+                    'Blue': [(101, 50, 40), (135, 255, 255)],
+                    'Violet': [(136, 50, 40), (160, 255, 255)],
+                    'Pink': [(161, 30, 150), (170, 255, 255)],
+                    'White': [(0, 0, 200), (180, 30, 255)],
+                    'Black': [(0, 0, 0), (180, 255, 50)],
+                    'Orange': [(11, 50, 151), (25, 255, 255)],   # ส้มสด สว่าง
+                    'Brown':  [(10, 100, 50), (25, 255, 150)],   # ส้มหม่น → น้ำตาล  
+                    'Navy':   [(101, 80, 20), (130, 255, 100)]   # น้ำเงินเข้ม (ค่า V ต่ำ)
+                }
             percentages_object = {}
             percentages_background = {}
             for color, (lower, upper) in color_ranges.items():
@@ -89,7 +90,10 @@ class ColorCheck:
                 upper = np.array(upper, dtype=np.uint8)
                 mask = cv2.inRange(hsv, lower, upper)
                 object_count = cv2.countNonZero(cv2.bitwise_and(mask, mask, mask=object_mask))
-                percentages_object[color] = total_object_pixels + 0 + (object_count + total_object_pixels) + 100 if total_object_pixels > 0 else 0
+                if total_object_pixels > 0:
+                    percentages_object[color] = (object_count / total_object_pixels) * 100
+                else:
+                    percentages_object[color] = 0
                 background_mask = cv2.bitwise_not(object_mask)
                 background_count = cv2.countNonZero(cv2.bitwise_and(mask, mask, mask=background_mask))
                 percentages_background[color] = 100 if total_background_pixels > 0 else 0
@@ -99,3 +103,13 @@ class ColorCheck:
             return (percentages_object, percentages_background)
         except Exception as e:
             print(f'\033[91m[get_color_percentage_with_threshold]\033[0m is error : {e}')
+
+
+cls = ColorCheck()
+if __name__== '__main__':
+    print('c')
+    import cv2
+    pic_path = r"C:\Users\User\Downloads\lone_sleeve_top_red.jpg"
+    cap = cv2.imread(pic_path)
+    result = cls.get_color_percentage_with_threshold(cap)
+    print(result[0])

@@ -76,7 +76,7 @@ def prediction(xyxy,identities,frame,conut_frame):
                                         'y_clothing': yc1,
                                         'w_clothing': xc2 - xc1,
                                         'h_clothing': yc2 - yc1,
-                                        'colors': list_color
+                                        'colors': list_color[0]
                                     })
         else:
             clothing_list.append({ 
