@@ -25,7 +25,9 @@ main_model_path =config.get("AI_MODEL_PATH")+'yolo11m.pt'
 print('clothing model : ',config.get('AI_MODDEL_NAME'))
 data = r"E:\ALL_CODE\python\fashion-project\lib\deepsort\data\coco.yaml"
 CLASS_NAMES_CLOTHING = ['short sleeve top', 'long sleeve top', 'short sleeve outwear', 'long sleeve outwear', 'vest', 'sling', 'shorts', 'trousers', 'skirt', 'short sleeve dress', 'long sleeve dress', 'vest dress', 'sling dress']
-
+top_body = [0, 1, 2, 3, 4, 5]
+bottom_body = [6, 7, 8]
+all_body = [9, 10, 11, 12]
 
 def prediction(xyxy,identities,frame,conut_frame):
     try:    
@@ -34,7 +36,7 @@ def prediction(xyxy,identities,frame,conut_frame):
         results= model_pred_clothing.predict(crop, verbose=False, conf=0.5, iou=0.5)[0]
         clothing_list=[]
         object_data = { 
-                        'objectin':False,
+                        'predict_id': str(uuid.uuid4()), 
                         'frame':conut_frame,
                         'x_person': xp1, 
                         'y_person': yp1,
@@ -58,38 +60,61 @@ def prediction(xyxy,identities,frame,conut_frame):
                     s+=f'frame: {conut_frame}ID: \033[93m{identities}\033[0m class: \033[92m{model_pred_clothing.names[cls_]}\033[0m | conf: \033[91m[{round(all_conf[i],2)}]\033[0m | '
                 print(s)
                 print("------------------------------------------------------------------------------------------------------")
-            for box in boxes:
-                xc1,yc1,xc2,yc2 = map(int, box.xyxy[0].cpu().numpy())
-                cls = int(box.cls.cpu().item())        # class index เป็น int
-                conf = float(box.conf.cpu().item())    # confidence เป็น float
-                crop_clothing = crop[yc1:yc2 ,xc1:xc2]
-                # crop_clothing = np.ascontiguousarray(crop_clothing)
-                list_color = colorC.get_color_percentage_with_threshold(crop_clothing)
+
+            df = results.boxes.data.cpu().numpy()  # numpy array: [x1, y1, x2, y2, conf, class] 
+            df = pd.DataFrame(df, columns=["x1", "y1", "x2", "y2", "conf", "cls"])
+
+            # เลือก 2 object ที่ conf สูงสุด
+
+            top2 = df.nlargest(2, "conf")
+            if len(top2) >= 2:
+                box1 = top2.iloc[0].to_dict()
+                x1, y1, x2, y2 = map(int, [box1['x1'], box1['y1'], box1['x2'], box1['y2']])
+
+                crop1 = crop[y1:y2, x1:x2]
+                colors1 = colorC.get_color_percentage_with_threshold(crop1)
+
+                box2 = top2.iloc[1].to_dict()
+                x1b, y1b, x2b, y2b = map(int, [box2['x1'], box2['y1'], box2['x2'], box2['y2']])
+
+                crop2 = crop[y1b:y2b, x1b:x2b]
+                colors2 = colorC.get_color_percentage_with_threshold(crop2)
                 clothing_list.append({ 
                                         **object_data,
-                                        'objectin':True,
-                                        'predict_id': str(uuid.uuid4()), 
-                                        'class_id': cls, 
-                                        'class_name': model_pred_clothing.names[cls], 
-                                        'confidence': round(conf, 2), 
-                                        'x_clothing': xc1,
-                                        'y_clothing': yc1,
-                                        'w_clothing': xc2 - xc1,
-                                        'h_clothing': yc2 - yc1,
-                                        'colors': list_color[0]
+                                        'cls1_id':box1['cls'],
+                                        'class1': {
+                                            'object_detail':box1, 
+                                            'color':colors1
+                                            }, 
+                                        'cls2_id':box2['cls'],
+                                        'class2':  {
+                                            'object_detail':box2, 
+                                            'color':colors2
+                                            }
                                     })
+            else:
+                box1 = top2.iloc[0].to_dict()
+                x1, y1, x2, y2 = map(int, [box1['x1'], box1['y1'], box1['x2'], box1['y2']])
+                crop1 = crop[y1:y2, x1:x2]
+                colors1 = colorC.get_color_percentage_with_threshold(crop1)
+                clothing_list.append({ 
+                                        **object_data,
+                                        'cls1_id':box1['cls'],
+                                        'class_1': {
+                                            'object_detail':box1, 
+                                            'color':colors1
+                                            }, 
+                                        'cls2_id': None,
+                                        'class_2': None
+                                    })
+
         else:
-            clothing_list.append({ 
+             clothing_list.append({ 
                                     **object_data,
-                                    'predict_id': str(uuid.uuid4()), 
-                                    'class_id': 'undifined', 
-                                    'class_name': 'undifined', 
-                                    'confidence': 0, 
-                                    'x_clothing': 0,
-                                    'y_clothing': 0,
-                                    'w_clothing': 0,
-                                    'h_clothing': 0,
-                                    'colors': []
+                                    'cls1_id': None,
+                                    'class_1': None,
+                                    'cls1_id': None, 
+                                    'class_2': None
                                 })
 
         return clothing_list
@@ -291,7 +316,7 @@ def processing_videos():
                 print('no video')
                 return
             
-            for video in [video_files[0]]:
+            for video in [video_files[1]]:
                 
                 start_track = time.perf_counter()
                 filename = Path(video).name

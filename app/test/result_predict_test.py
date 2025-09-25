@@ -10,6 +10,7 @@ import numpy as np
 import sys
 from pathlib import Path
 import os
+CLASS_NAMES_CLOTHING = ['short sleeve top', 'long sleeve top', 'short sleeve outwear', 'long sleeve outwear', 'vest', 'sling', 'shorts', 'trousers', 'skirt', 'short sleeve dress', 'long sleeve dress', 'vest dress', 'sling dress']
 
 
     # ถ้า __file__ ไม่มีค่า ให้ใช้ cwd แทน
@@ -255,6 +256,7 @@ class GraphPlayer:
                     # cv2.putText(frame, f"ID:{item['track_id']}", (x, y+20),
                     #             cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
                     if self.show_cloth:
+                        print('')
                         xc, yc, wc, hc = item['x_clothing'], item['y_clothing'], item['w_clothing'], item['h_clothing']
                         # วาด rectangle
                         cv2.rectangle(frame, (x+xc, y+yc), (x+wc+xc, y+hc+yc), (0, 0, 255), 2)
@@ -291,22 +293,41 @@ class SummaryData:
         group_names = list(group_track.groups.keys())  # ['A','B','C']
         random_group_name = np.random.choice(group_names)
         data_random_group = group_track.get_group(random_group_name)
-        group_class = data_random_group.groupby('class_name')
-        summary_data = pd.DataFrame(columns=['class_name','total','0.3','0.4','0.5','0.6','0.7'])
-        for name,data in group_class:
+        # ชุดที่ 1 
+        group_class1 = data_random_group.groupby('cls1_id')
+        summary_data1 = pd.DataFrame(columns=['class_name','total','0.3','0.4','0.5','0.6','0.7'])
+        for name,data in group_class1:
             new_row = {
-                'class_name': name,
+                'class_name': CLASS_NAMES_CLOTHING[name],
                 'total': data.shape[0],
-                '0.3': (data['confidence'] > 0.3).sum(),
-                '0.4': (data['confidence'] > 0.4).sum(),
-                '0.5': (data['confidence'] > 0.5).sum(),
-                '0.6': (data['confidence'] > 0.6).sum(),
-                '0.7': (data['confidence'] > 0.7).sum()
+                '0.3': (data['class1']['object_detail']['conf'] > 0.3).sum(),
+                '0.4': (data['class1']['object_detail']['conf'] > 0.4).sum(),
+                '0.5': (data['class1']['object_detail']['conf'] > 0.5).sum(),
+                '0.6': (data['class1']['object_detail']['conf'] > 0.6).sum(),
+                '0.7': (data['class1']['object_detail']['conf'] > 0.7).sum()
             }
 
-            summary_data = pd.concat([summary_data, pd.DataFrame([new_row])], ignore_index=True)
+            summary_data1 = pd.concat([summary_data1, pd.DataFrame([new_row])], ignore_index=True)
+        # ชุดที่ 2
+        group_class2 = data_random_group.groupby('cls2_id')
+        summary_data2 = pd.DataFrame(columns=['class_name','total','0.3','0.4','0.5','0.6','0.7'])
+        for name,data in group_class2:
+            new_row = {
+                'class_name': CLASS_NAMES_CLOTHING[name],
+                'total': data.shape[0],
+                '0.3': (data['class1']['object_detail']['conf'] > 0.3).sum(),
+                '0.4': (data['class1']['object_detail']['conf'] > 0.4).sum(),
+                '0.5': (data['class1']['object_detail']['conf'] > 0.5).sum(),
+                '0.6': (data['class1']['object_detail']['conf'] > 0.6).sum(),
+                '0.7': (data['class1']['object_detail']['conf'] > 0.7).sum()
+            }
+
+            summary_data2 = pd.concat([summary_data2, pd.DataFrame([new_row])], ignore_index=True)
         print("ID :",random_group_name)
-        print(summary_data)
+        print('clothing 1')
+        print(summary_data1)
+        print('clothing 2')
+        print(summary_data2)
         self.run()
 
 
@@ -315,19 +336,23 @@ class SummaryData:
 
 
 # ---------------- ใช้งาน ----------------
-if __name__ == "__main__":
+def processing_check():
     # โหลด detections จาก JSON (แบบ list[dict])
-    with open(r"E:\ALL_CODE\python\fashion-project\resources\result_prediction\clothing_detection\results_clothing_detection_20250917_2.json", "r", encoding="utf-8") as f:
+    with open(r"E:\ALL_CODE\python\fashion-project\resources\result_prediction\clothing_detection\results_clothing_detection_20250925_1.json", "r", encoding="utf-8") as f:
         detections = json.load(f) 
     df = pd.DataFrame(detections)
     video_select = df[df['filename'] == "4p-c0-new.mp4"]
 
     print(len(video_select))
     app = SummaryData('root',video_select)
-    # app = GraphPlayer(video_select,59,True)
+    # app = GraphPlayer(video_select,11)
     # root = tk.Tk()
-    
-    
+
+if __name__ == "__main__":   
+    processing_check()
+
+
+
     # app = VideoPlayer(root, r"E:\ALL_CODE\python\fashion-project\resources\videos\4p-c0-new.mp4", video_select)
     # root.mainloop()
     # [67,42,40,69]

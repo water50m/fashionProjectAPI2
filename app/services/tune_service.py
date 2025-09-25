@@ -49,10 +49,8 @@ def selet_data(data):
          print(f"[selcet_data] is error : {e}")
 
 def find_clothing( data):
-        
         try:
             data_frame = pd.DataFrame(data)
-            
             gruop_data = data_frame.groupby('track_id')
             body_T_class = [0, 1, 2, 3, 4, 5]
             body_B_class = [6, 7, 8]
@@ -62,7 +60,7 @@ def find_clothing( data):
             count_group_track = len(gruop_data.size())
             for id, df in gruop_data:
                 current_group+=1
-                print(f'group {current_group}/{count_group_track}')
+                print(f'group {current_group}/{count_group_track} ID: {id}')
                 nclass = df.groupby('class_id')
                 if nclass.ngroups < 3:
                     return_data = pd.concat([df, return_data], ignore_index=True)
@@ -90,7 +88,7 @@ def find_clothing( data):
                     track_group = false_list.groupby('track_id')
                     new_rows = []
                     for track_id, objs in track_group:
-                        print(objs['mean_color_bgr'])
+
                         frame_group = objs.groupby('frame')
                         for timeframe, frames in frame_group:
                             row = frames.iloc[0]
@@ -127,7 +125,7 @@ def find_clothing( data):
                     track_group = true_list.groupby('track_id')
                     new_rows = []
                     for track_id, objs in track_group:
-                        print(objs['mean_color_bgr'])
+
                         frame_group = objs.groupby('frame')
                         for timeframe, frames in frame_group:
                             row = frames.iloc[0]
@@ -159,7 +157,7 @@ def find_clothing( data):
                     track_group = true_list.groupby('track_id')
                     new_rows = []
                     for track_id, objs in track_group:
-                        print(objs['mean_color_bgr'])
+
                         frame_group = objs.groupby('frame')
                         for timeframe, frames in frame_group:
                             row = frames.iloc[0]
@@ -245,7 +243,7 @@ def process(path=None,Data=None):
             with open(read_path, "r", encoding="utf-8") as f:
                 detections = json.load(f) 
         tuned = find_clothing(detections)
-        print(tuned[:1]['mean_color_bgr'])
+
         # save result tuned 
         config = load_config()
 
